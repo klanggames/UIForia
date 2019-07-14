@@ -47,6 +47,10 @@ namespace UIForia.Exceptions {
 
         // todo -- add more debug info to these and make them actually useful. These are basically placeholder but need help to be really useful to people
 
+        public static CompileException MissingAliasResolver(string aliasName) {
+            return new CompileException($"No alias resolvers were registered that could handle alias {aliasName}");
+        }
+        
         public static CompileException NoStatementsRootBlock() {
             return new CompileException($"Cannot compile the lambda because there are not statements emitted in the main block of the function");
         }

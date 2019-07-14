@@ -1,4 +1,6 @@
+using UIForia.Compilers;
 using UIForia.Elements;
+using UIForia.Util;
 
 namespace UIForia.Systems {
 
@@ -7,13 +9,21 @@ namespace UIForia.Systems {
         internal int currentPhase;
         internal int previousPhase;
         internal LinqBindingNode currentlyActive;
+        internal StructStack<TemplateContextWrapper> contextStack;
+        
+        private readonly LinqBindingNode rootNode;
 
-        private readonly LinqBindingNode rootNode = new LinqBindingNode();
-
+        public LinqBindingSystem() {
+            this.contextStack = new StructStack<TemplateContextWrapper>();
+            this.currentPhase = 0;
+            this.previousPhase = -1;
+            this.rootNode = new LinqBindingNode();
+        }
+        
         public void OnReset() { }
 
         public void OnUpdate() {
-            rootNode.Update();
+            rootNode.Update(contextStack);
         }
 
         public void OnDestroy() { }

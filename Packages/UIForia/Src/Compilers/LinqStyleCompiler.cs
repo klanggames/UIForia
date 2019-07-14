@@ -6,9 +6,7 @@ namespace UIForia.Compilers {
 
     public class LinqStyleCompiler {
 
-        public LinqBinding Compile(Type rootType, Type elementType, TemplateContextTreeDefinition ctx, in AttributeDefinition2 attributeDefinition) {
-            return null;
-        }
+        
 
     }
 

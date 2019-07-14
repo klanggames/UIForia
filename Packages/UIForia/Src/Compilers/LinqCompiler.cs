@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using UIForia.Compilers.ExpressionResolvers;
 using UIForia.Exceptions;
 using UIForia.Parsing.Expression;
 using UIForia.Parsing.Expression.AstNodes;
@@ -14,6 +13,12 @@ using UIForia.Util;
 using Debug = UnityEngine.Debug;
 
 namespace UIForia.Compilers {
+
+    public interface ILinqAliasResolver {
+
+        Expression Resolve(string aliasName, LinqCompiler compiler);
+
+    }
 
     public class LinqCompiler {
 
@@ -26,7 +31,7 @@ namespace UIForia.Compilers {
         private static readonly ObjectPool<BlockDefinition2> s_BlockPool = new ObjectPool<BlockDefinition2>((b) => b.Spawn(), (b) => b.Release());
 
         private static readonly MethodInfo StringConcat2 = typeof(string).GetMethod(
-            "Concat",
+            nameof(string.Concat),
             ReflectionUtil.SetTempTypeArray(typeof(string), typeof(string))
         );
 
@@ -49,8 +54,15 @@ namespace UIForia.Compilers {
         private int subCompilerId;
         private int id;
 
+        private struct AliasResolver {
+
+            public string aliasName;
+            public ILinqAliasResolver resolver;
+
+        }
+
         private Action<LinqCompiler, Expression> nullCheckHandler;
-        private LightList<ExpressionAliasResolver> aliasResolvers;
+        private StructStack<AliasResolver> aliasResolvers;
 
         public LinqCompiler() {
             this.parameters = new StructList<Parameter>();
@@ -61,7 +73,21 @@ namespace UIForia.Compilers {
             PushBlock();
         }
 
-        public void AddAliasResolver(string aliasName, Func<ASTNode> resolver) { }
+        public void PushAliasResolver(string aliasName, ILinqAliasResolver resolver) {
+            aliasResolvers = aliasResolvers ?? new StructStack<AliasResolver>();
+            aliasResolvers.Push(new AliasResolver() {
+                aliasName = aliasName[0] == '$' ? aliasName : '$' + aliasName,
+                resolver = resolver
+            });
+        }
+
+        public void PopAliasResolver() {
+            if (aliasResolvers == null || aliasResolvers.size == 0) {
+                return;
+            }
+
+            aliasResolvers.Pop();
+        }
 
         private BlockDefinition2 currentBlock {
             [DebuggerStepThrough] get { return blockStack.PeekUnchecked(); }
@@ -265,14 +291,31 @@ namespace UIForia.Compilers {
             return Visit(targetType, ExpressionParser.Parse(input));
         }
 
-        public ParameterExpression AddVariable(Type type, string name, Expression value) {
-            ParameterExpression variable = currentBlock.AddInternalVariable(type, name);
+        public ParameterExpression AddVariable(Parameter parameter,  string value) {
+            ParameterExpression variable = currentBlock.AddUserVariable(parameter);
+            AddStatement(Expression.Assign(variable, Visit(parameter.type, ExpressionParser.Parse(value))));
+            if((parameter.flags & ParameterFlags.NeverNull) != 0) {
+                wasNullChecked.Add(parameter.expression); // todo -- hack :(
+            }
+            return variable;
+        }
+        
+        public ParameterExpression AddVariable(Parameter parameter,  Expression value) {
+            ParameterExpression variable = currentBlock.AddUserVariable(parameter);
+            if((parameter.flags & ParameterFlags.NeverNull) != 0) {
+                wasNullChecked.Add(parameter.expression); // todo -- hack :(
+            }
             AddStatement(Expression.Assign(variable, value));
             return variable;
         }
 
-        public void SetImplicitContext(ParameterExpression parameterExpression) {
-            implicitContext = new Parameter(parameterExpression.Type, parameterExpression.Name);
+        public void SetImplicitContext(ParameterExpression parameterExpression, ParameterFlags flags = 0) {
+            implicitContext = new Parameter() {
+                expression = parameterExpression,
+                flags = flags,
+                name = parameterExpression.Name,
+                type = parameterExpression.Type
+            };
         }
 
         public ParameterExpression AddVariable(Type type, string name) {
@@ -352,6 +395,10 @@ namespace UIForia.Compilers {
             Return(ExpressionParser.Parse(input));
         }
 
+        public void Statement(string input) {
+            AddStatement(Visit(ExpressionParser.Parse(input)));
+        }
+
         private void EnsureReturnLabel() {
             if (returnLabel != null) {
                 return;
@@ -379,7 +426,6 @@ namespace UIForia.Compilers {
                 return;
             }
 
-
             if (returnVar == null) {
                 if (id == 0) {
                     returnVar = blockStack.Stack[0].AddInternalVariable(returnType, "retn_val");
@@ -390,6 +436,34 @@ namespace UIForia.Compilers {
             }
 
             Expression returnVal = Visit(returnType, ast);
+            AddStatement(Expression.Assign(returnVar, returnVal));
+        }
+
+        public void Return(string input, out Type retnType) {
+            if (returnType == null) {
+                throw CompileException.SignatureNotDefined();
+            }
+
+            if (returnType == typeof(void)) { // error if input?
+                // ensure we have a return label
+                // emit a goto for the label
+                EnsureReturnLabel();
+
+                AddStatement(Expression.Return(returnLabel));
+                retnType = typeof(void);
+                return;
+            }
+
+            if (returnVar == null) {
+                if (id == 0) {
+                    returnVar = blockStack.Stack[0].AddInternalVariable(returnType, "retn_val");
+                }
+                else {
+                    returnVar = blockStack.Stack[0].AddInternalVariable(returnType, "retn_val_" + id);
+                }
+            }
+
+            Expression returnVal = VisitAndGetType(returnType, ExpressionParser.Parse(input), out retnType);
             AddStatement(Expression.Assign(returnVar, returnVal));
         }
 
@@ -583,24 +657,30 @@ namespace UIForia.Compilers {
             parameters.Add(parameter);
         }
 
-        private ParameterExpression ResolveVariableName(string variableName) {
-            ParameterExpression variable = currentBlock.ResolveVariable(variableName);
+        private Parameter? ResolveVariableName(string variableName) {
+            Parameter? variable = currentBlock.ResolveVariable(variableName);
             if (variable != null) {
                 return variable;
             }
 
             for (int i = 0; i < parameters.Count; i++) {
                 if (parameters[i].name == variableName) {
-                    return parameters[i].expression;
+                    return parameters[i];
                 }
             }
 
             return parent?.ResolveVariableName(variableName);
         }
 
-        private bool TryResolveVariableName(string variableName, out ParameterExpression expression) {
-            expression = ResolveVariableName(variableName);
-            return expression != null;
+        private bool TryResolveVariableName(string variableName, out Parameter parameter) {
+            parameter = default;
+            Parameter? p = ResolveVariableName(variableName);
+            if (p != null) {
+                parameter = p.Value;
+                return true;
+            }
+
+            return false;
         }
 
         public LHSStatementChain AssignableStatement(string input) {
@@ -624,7 +704,7 @@ namespace UIForia.Compilers {
                     retn.isSimpleAssignment = true;
                     retn.targetExpression = MemberAccess(implicitContext.Value.expression, idNode.name);
                     return retn;
-                    
+
 //                    if (TryResolveInstanceOrStaticMemberAccess(implicitContext.Value.expression, idNode.name, out Expression expression)) {
 //                        retn.isSimpleAssignment = true;
 //                        retn.targetExpression = expression;
@@ -1325,27 +1405,43 @@ namespace UIForia.Compilers {
             return retn;
         }
 
+        private Expression ResolveAlias(string aliasName) {
+            if (aliasResolvers == null) {
+                throw CompileException.MissingAliasResolver(aliasName);
+            }
+
+            for (int i = aliasResolvers.size - 1; i >= 0; i--) {
+                if (aliasResolvers.array[i].aliasName == aliasName) {
+                    return aliasResolvers.array[i].resolver.Resolve(aliasName, this);
+                }
+            }
+
+            throw CompileException.MissingAliasResolver(aliasName);
+        }
+
         private Expression VisitAccessExpression(MemberAccessExpressionNode accessNode) {
             LightList<ProcessedPart> parts = ProcessASTParts(accessNode.parts);
 
             // assume not an alias for now, aliases will be resolved by user visit code
 
-            Expression head = null;
-
             int start = 0;
             string accessRootName = accessNode.identifier;
             string resolvedNamespace;
+
+            if (accessRootName[0] == '$') {
+                return VisitAccessExpressionParts(ResolveAlias(accessRootName), parts, ref start);
+            }
 
             // if implicit is defined give it priority
             // then check variables
             // then check types
             if (implicitContext.HasValue) {
-                if (TryCreateVariableExpression(implicitContext.Value.expression, accessNode.identifier, out head)) {
+                if (TryCreateVariableExpression(implicitContext.Value.expression, accessNode.identifier, out Expression head)) {
                     return VisitAccessExpressionParts(head, parts, ref start);
                 }
             }
 
-            if (TryResolveVariableName(accessNode.identifier, out ParameterExpression variable)) {
+            if (TryResolveVariableName(accessNode.identifier, out Parameter variable)) {
                 // thing.function() -> head -> invoke node
                 // thing.function().function()[i]()
                 // dot access type -> invoke, index, fieldproperty
@@ -1550,7 +1646,10 @@ namespace UIForia.Compilers {
         }
 
         private bool RequiresNullCheck(Expression head) {
-            return shouldNullCheck && head.Type.IsClass && !wasNullChecked.Contains(head) && (!ResolveParameter(head, out Parameter parameter) || (parameter.flags & ParameterFlags.NeverNull) == 0);
+            return shouldNullCheck && 
+                   head.Type.IsClass && 
+                   !wasNullChecked.Contains(head) && 
+                   (!ResolveParameter(head, out Parameter parameter) || (parameter.flags & ParameterFlags.NeverNull) == 0);
         }
 
         private Expression NullCheck(Expression variable) {
@@ -1700,6 +1799,21 @@ namespace UIForia.Compilers {
 
         private Expression Visit(Type targetType, ASTNode node) {
             Expression retn = VisitUnchecked(targetType, node);
+            if (targetType != null && retn.Type != targetType) {
+                try {
+                    retn = Expression.Convert(retn, targetType);
+                }
+                catch (InvalidOperationException) {
+                    throw CompileException.InvalidTargetType(targetType, retn.Type);
+                }
+            }
+
+            return retn;
+        }
+
+        private Expression VisitAndGetType(Type targetType, ASTNode node, out Type statementType) {
+            Expression retn = VisitUnchecked(targetType, node);
+            statementType = retn.Type;
             if (targetType != null && retn.Type != targetType) {
                 try {
                     retn = Expression.Convert(retn, targetType);

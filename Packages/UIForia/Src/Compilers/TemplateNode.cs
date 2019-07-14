@@ -11,7 +11,7 @@ namespace UIForia.Compilers {
         public LightList<TemplateNode> children;
         public TemplateAST astRoot;
         public TemplateNode parent;
-        public string textContent;
+        public LightList<string> textContent;
         public ProcessedType processedType;
         public string slotName;
 
@@ -60,6 +60,17 @@ namespace UIForia.Compilers {
             }
 
             return false;
+        }
+
+        public string GetStringContent() {
+            string retn = "";
+            if (textContent == null) return retn;
+            
+            for (int i = 0; i < textContent.Count; i++) {
+                retn += textContent[i];
+            }
+
+            return retn;
         }
 
     }

@@ -37,6 +37,7 @@ namespace UIForia.Compilers {
         public Application application;
 
         private readonly XmlParserContext parserContext;
+        private static readonly TextElementParser s_TextElementParser = new TextElementParser();
 
         [ThreadStatic] private static string[] s_NamespaceLookup;
 
@@ -68,9 +69,8 @@ namespace UIForia.Compilers {
         }
 
         internal TemplateAST Parse(ProcessedType processedType) {
-            
             string template = processedType.GetTemplateFromApplication(application);
-            
+
             XElement root = XElement.Load(new XmlTextReader(template, XmlNodeType.Element, parserContext));
 
             root.MergeTextNodes();
@@ -205,7 +205,7 @@ namespace UIForia.Compilers {
                         case "alias":
                             attributeType = AttributeType.Alias;
                             break;
-                        
+
                         default:
                             throw new ArgumentOutOfRangeException("Unknown attribute prefix: " + prefix);
                     }
@@ -221,22 +221,36 @@ namespace UIForia.Compilers {
                 switch (node.NodeType) {
                     case XmlNodeType.Text: {
                         XText textNode = (XText) node;
+                        
                         if (string.IsNullOrWhiteSpace(textNode.Value)) {
                             continue;
                         }
 
-                        if (typeof(UITextElement).IsAssignableFrom(parent.processedType.rawType)) {
-                            parent.textContent += textNode.Value;
-                            continue;
+                        string textContent = textNode.Value.Trim(); // maybe don't trim & let text style handle it
+                        
+                        if (parent.children.Count == 0) {
+                            TemplateNode templateNode = TemplateNode.Get();
+                            templateNode.parent = parent;
+                            templateNode.astRoot = parent.astRoot;
+                            templateNode.processedType = TypeProcessor.GetProcessedType(typeof(UITextElement));
+                            templateNode.textContent = ProcessTextContent(textContent);
+                            parent.children.Add(templateNode);
+                            templateNode = TemplateNode.Get();
+                        }
+                        else if (typeof(UITextElement).IsAssignableFrom(parent.children[parent.children.size - 1].processedType.rawType)) {
+                            AppendTextContent(parent.children[parent.children.size - 1].textContent, textContent);
+                        }
+                        else {
+                            // add a new child
+                            TemplateNode templateNode = TemplateNode.Get();
+                            templateNode.parent = parent;
+                            templateNode.astRoot = parent.astRoot;
+                            templateNode.processedType = TypeProcessor.GetProcessedType(typeof(UITextElement));
+                            templateNode.textContent = ProcessTextContent(textContent);
+                            parent.children.Add(templateNode);
+                            templateNode = TemplateNode.Get();
                         }
 
-                        TemplateNode templateNode = TemplateNode.Get();
-                        templateNode.parent = parent;
-                        templateNode.astRoot = parent.astRoot;
-                        templateNode.processedType = TypeProcessor.GetProcessedType(typeof(UITextElement));
-                        templateNode.textContent = textNode.Value;
-                        parent.children.Add(templateNode);
-                        templateNode = TemplateNode.Get();
                         continue;
                     }
 
@@ -269,6 +283,13 @@ namespace UIForia.Compilers {
                 throw new TemplateParseException(node, $"Unable to handle node type: {node.NodeType}");
             }
 
+
+            if (parent.children.Count == 1 && typeof(UITextElement).IsAssignableFrom(parent.processedType.rawType) && typeof(UITextElement).IsAssignableFrom(parent.children[0].processedType.rawType)) {
+                parent.textContent = parent.children[0].textContent;
+                TemplateNode.Release(ref parent.children.array[0]);
+                parent.children.Clear();
+            }
+            
             if (parent.parent != null && parent.processedType.requiresTemplateExpansion && parent.children.Count > 0) {
                 TemplateNode childrenSlotNode = TemplateNode.Get();
                 for (int i = 0; i < parent.children.size; i++) {
@@ -292,6 +313,34 @@ namespace UIForia.Compilers {
                     TemplateNode.Release(ref childrenSlotNode);
                 }
             }
+        }
+
+        private static LightList<string> ProcessTextContent(string input) {
+            string[] expressionParts = s_TextElementParser.Parse(input);
+            
+            LightList<string> output = LightList<string>.GetMinSize(expressionParts.Length);
+            
+            for (int i = 0; i < expressionParts.Length; i++) {
+                if (expressionParts[i] == "''") {
+                    continue;
+                }
+                output.Add(expressionParts[i]);
+            }
+
+            return output;
+        }
+
+        private static void AppendTextContent(LightList<string> target, string input) {
+            string[] expressionParts = s_TextElementParser.Parse(input);
+            target.EnsureAdditionalCapacity(expressionParts.Length);
+            
+            for (int i = 0; i < expressionParts.Length; i++) {
+                if (expressionParts[i] == "''") {
+                    continue;
+                }
+                target.Add(expressionParts[i]);
+            }
+
         }
 
         private UsingDeclaration ParseUsing(XElement element) {

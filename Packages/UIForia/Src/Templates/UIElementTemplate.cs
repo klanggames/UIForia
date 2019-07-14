@@ -77,16 +77,6 @@ namespace UIForia.Templates {
 
             templateToExpand = app.templateParser.GetParsedTemplate(rootType);
 
-            Action<IList<ExpressionAliasResolver>, AttributeList> getResolvers = TypeProcessor.GetProcessedType(elementType).getResolvers;
-
-            if (getResolvers != null) {
-                resolvers = ListPool<ExpressionAliasResolver>.Get();
-                getResolvers.Invoke(resolvers, new AttributeList(attributes));
-                for (int i = 0; i < resolvers.Count; i++) {
-                    template.compiler.AddAliasResolver(resolvers[i]);
-                }
-            }
-
             ResolveBaseStyles(template);
             CompileStyleBindings(template);
             CompileInputBindings(template, templateToExpand.rootElementTemplate != this);

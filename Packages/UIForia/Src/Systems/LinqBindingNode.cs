@@ -117,11 +117,8 @@ namespace UIForia.Systems {
             }
         }
 
-        public static LinqBindingNode Get(TemplateScope2 scope, UIElement element, UIElement rootElement, TemplateContext ctx, LinqBinding enabledBinding, LightList<LinqBinding>.ListSpan bindings) {
+        public static LinqBindingNode Get(TemplateScope2 scope, UIElement element, UIElement rootElement) {
             LinqBindingNode node = new LinqBindingNode();
-            node.bindings = bindings;
-            node.ctx = ctx;
-            node.enabledBinding = enabledBinding;
             node.root = rootElement;
             node.element = element;
             node.system = scope.application.LinqBindingSystem;

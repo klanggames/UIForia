@@ -5,8 +5,8 @@ namespace UIForia.Util {
 
     public class StructStack<T> {
 
-        private T[] array;
-        private int size;
+        public T[] array;
+        public int size;
         private bool isPooled;
 
         public int Count => size;
@@ -47,6 +47,10 @@ namespace UIForia.Util {
 
         public void PushUnchecked(in T item) {
             array[size++] = item;
+        }
+
+        public T PeekAt(int index) {
+            return array[index];
         }
 
         public T PopUnchecked() {

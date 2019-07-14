@@ -1,3 +1,17 @@
+
+
+using System.Text;
+
+namespace UIForia.Util {
+
+    public static class TextUtil {
+
+        public static StringBuilder StringBuilder = new StringBuilder(1024);
+
+    }
+
+}
+
 //using System.Collections.Generic;
 //using System.Text;
 //using SVGX;

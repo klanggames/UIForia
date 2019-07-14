@@ -8,14 +8,13 @@ using UIForia.Elements;
 using UIForia.Exceptions;
 using UIForia.Extensions;
 using UIForia.Parsing.Expression;
-using UIForia.Systems;
 using UIForia.Util;
 
 namespace UIForia.Compilers {
 
     public class LinqPropertyCompiler {
 
-        private readonly LinqCompiler compiler = new LinqCompiler();
+        private readonly LinqCompiler compiler;
         
         [ThreadStatic] private static Dictionary<Type, LightList<PropertyChangeHandlerMethod>> s_TypeMap;
 
@@ -39,19 +38,23 @@ namespace UIForia.Compilers {
 
         }
 
-        public LambdaExpression BuildLambda(Type rootType, Type elementType, TemplateContextTreeDefinition ctx, in AttributeDefinition2 attributeDefinition) {
-            LightList<MethodInfo> changedHandlers = GetPropertyChangedHandlers(elementType, attributeDefinition.key);
+        public LinqPropertyCompiler(LinqCompiler compiler) {
+            this.compiler = compiler;
+        }
+        
+        public LambdaExpression BuildLambda(CompilationContext ctx, in AttributeDefinition2 attributeDefinition) {
+            LightList<MethodInfo> changedHandlers = GetPropertyChangedHandlers(ctx.elementType.rawType, attributeDefinition.key);
 
             compiler.SetSignature(
                 // todo -- supported dotted or indexed access to properties, need to play with the implicit flag, set to element for left, root for right
-                new Parameter(typeof(UIElement), "root", ParameterFlags.NeverNull),
-                new Parameter(typeof(UIElement), "element", ParameterFlags.NeverNull),
-                new Parameter(typeof(TemplateContext), "templateContext", ParameterFlags.NeverNull)
+                new Parameter(typeof(UIElement), "__root", ParameterFlags.NeverNull),
+                new Parameter(typeof(UIElement), "__element", ParameterFlags.NeverNull),
+                new Parameter(typeof(StructStack<TemplateContextWrapper>), "__contextStack", ParameterFlags.NeverNull)
             );
 
             // todo -- never null check _root or _element
-            ParameterExpression rootExpr = compiler.AddVariable(rootType, "_root", Expression.Convert(compiler.GetParameter("root"), rootType));
-            ParameterExpression elementExpr = compiler.AddVariable(elementType, "_element", Expression.Convert(compiler.GetParameter("element"), elementType));
+            ParameterExpression rootExpr = compiler.AddVariable(new Parameter(ctx.rootType.rawType, "_root", ParameterFlags.NeverNull), Expression.Convert(compiler.GetParameter("root"), ctx.rootType.rawType));
+            ParameterExpression elementExpr = compiler.AddVariable(new Parameter(ctx.elementType.rawType, "_element", ParameterFlags.NeverNull), Expression.Convert(compiler.GetParameter("element"), ctx.elementType.rawType));
             
             // if is content binding
                 // assign root = element
@@ -98,7 +101,7 @@ namespace UIForia.Compilers {
                     if (blockContext.elementType.Implements(typeof(IPropertyChangedHandler))) {
                         //compiler.Invoke("element", "OnPropertyChanged", compiler.GetVariable("currentValue"));
                     }
-                }, new BlockCtx(compiler, changedHandlers, left, right, rootType, elementType));
+                }, new BlockCtx(compiler, changedHandlers, left, right, ctx.rootType.rawType, ctx.elementType.rawType));
             }
 
             LightList<MethodInfo>.Release(ref changedHandlers);

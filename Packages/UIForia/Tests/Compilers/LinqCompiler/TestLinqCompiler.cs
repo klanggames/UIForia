@@ -46,11 +46,11 @@ public class TestLinqCompiler {
         public const float ConstFloatValue = 14242;
         public LinqThing self => this;
         public Indexable indexable;
-        
+
         public Func<int, int> FnReturningFunction() {
             return (int val) => val;
         }
-        
+
         public int GetIntValue(float val) {
             return (int) val;
         }
@@ -105,7 +105,7 @@ public class TestLinqCompiler {
         }
 
     }
-    
+
     public struct StructValueHolder<T> {
 
         public T value;
@@ -2532,13 +2532,12 @@ public class TestLinqCompiler {
 
     [Test]
     public void CompileChained_Invoke() {
-        
         LinqCompiler compiler = new LinqCompiler();
-        
+
         compiler.SetSignature<int>(
             new Parameter<LinqThing>("thing", ParameterFlags.NeverNull)
         );
-        
+
         LinqThing thing = new LinqThing();
         compiler.Return("thing.FnReturningFunction()(123)");
         compiler.Log();
@@ -2560,20 +2559,19 @@ public class TestLinqCompiler {
             return retn_val;
         }
         ", compiler.Print());
-        
+
         Func<LinqThing, int> fn = compiler.Compile<Func<LinqThing, int>>();
         Assert.AreEqual(123, fn(thing));
     }
-    
+
     [Test]
     public void CompileChained_Index() {
-        
         LinqCompiler compiler = new LinqCompiler();
-        
+
         compiler.SetSignature<int>(
             new Parameter<LinqThing>("thing", ParameterFlags.NeverNull)
         );
-        
+
         LinqThing thing = new LinqThing();
         compiler.SetNullCheckingEnabled(false);
         compiler.Return("thing.indexable[123456][2]");
@@ -2585,38 +2583,36 @@ public class TestLinqCompiler {
             return (int)thing.indexable[123456][2];
         }
         ", compiler.Print());
-        
+
         Func<LinqThing, int> fn = compiler.Compile<Func<LinqThing, int>>();
-        Assert.AreEqual((int)thing.indexable[123456][2], fn(thing));
+        Assert.AreEqual((int) thing.indexable[123456][2], fn(thing));
+    }
+
+    public class StaticThing {
+
+        public static int value;
+
+        public static void Increment() {
+            value++;
+        }
+
     }
 
     [Test]
-    public void CompileAlias_Identifier() {
+    public void CompileStatement_StaticMethodCall() {
         LinqCompiler compiler = new LinqCompiler();
-        compiler.SetSignature<int>();
-
-        compiler.AddAliasResolver("intAlias", () => ExpressionParser.Parse("12"));
-        compiler.AddAliasResolver("intAlias(,,)", () => ExpressionParser.Parse("12"));
-        compiler.AddAliasResolver("intAlias[,]", () => ExpressionParser.Parse("12"));
-        compiler.AddAliasResolver("intAlias.*()", () => ExpressionParser.Parse("12"));
-        compiler.AddAliasResolver("item", () => {
-            //int idx = FindRepeatContextIndex(element, template);
-            // return ExpressionParser.Parse(((RepeatContext)contexts[idx]).item);
-            // return ExpressionParser.Parse(((SelectContext)contexts[idx]).option);
-            // return Func<>();
-            // return ExpressionParser.Parse(ClassPath.FindContext(element, context, "item"));
-            // $event.name
-            // $event();
-            return ExpressionParser.Parse("12");
-        });
-
-        compiler.Return("$intAlias");
-
+        compiler.SetSignature();
+        StaticThing.value = 10;
+        compiler.Statement("TestLinqCompiler.StaticThing.Increment()");
+        compiler.Log();
+        Action fn = compiler.Compile<Action>();
+        fn();
+        Assert.AreEqual(11, StaticThing.value);
         AssertStringsEqual(@"
+        () =>
         {
-            return 12;
-        }            
-        ", compiler.Print());
+            TestLinqCompiler.StaticThing.Increment();
+        }", compiler.Print());
     }
 
     public void AssertStringsEqual(string a, string b) {

@@ -1,13 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using UIForia.Attributes;
-using UIForia.Compilers.ExpressionResolvers;
 using UIForia.Elements;
 using UIForia.Exceptions;
-using UIForia.Templates;
 using UIForia.Util;
 using Debug = UnityEngine.Debug;
 
@@ -16,34 +12,15 @@ namespace UIForia.Parsing.Expression {
     [DebuggerDisplay("{rawType.Name}")]
     public struct ProcessedType {
 
-        private static readonly Type[] s_Signature = {
-            typeof(IList<ExpressionAliasResolver>),
-            typeof(AttributeList)
-        };
-
         public readonly Type rawType;
         public readonly TemplateAttribute templateAttr;
-        public readonly Action<IList<ExpressionAliasResolver>, AttributeList> getResolvers;
         public readonly bool requiresTemplateExpansion;
         public bool requiresUpdateFn;
 
         public ProcessedType(Type rawType, TemplateAttribute templateAttr) {
             this.rawType = rawType;
             this.templateAttr = templateAttr;
-            this.getResolvers = null;
-            
-            // todo -- remove this and replace with a better way to introduce context
-            
-            MethodInfo info = rawType.GetMethod("GetAliasResolvers", BindingFlags.Static | BindingFlags.NonPublic, null, s_Signature, null);
-            
-            requiresUpdateFn = ReflectionUtil.IsOverride(rawType.GetMethod(nameof(UIElement.OnUpdate)));
-            
-            if (info != null) {
-                this.getResolvers = (Action<IList<ExpressionAliasResolver>, AttributeList>) Delegate.CreateDelegate(
-                    typeof(Action<IList<ExpressionAliasResolver>, AttributeList>), info
-                );
-            }
-
+            this.requiresUpdateFn = ReflectionUtil.IsOverride(rawType.GetMethod(nameof(UIElement.OnUpdate)));
             this.requiresTemplateExpansion = (
                 !typeof(UIContainerElement).IsAssignableFrom(rawType) &&
                 !typeof(UITextElement).IsAssignableFrom(rawType) &&

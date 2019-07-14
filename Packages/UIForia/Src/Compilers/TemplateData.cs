@@ -25,16 +25,26 @@ namespace UIForia.Compilers {
         internal Func<UIElement, UIElement, TemplateContext>[] contextProviderFns;
         internal Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>[] sharedBindingFns;
 
+        public static readonly Action<UIElement, UIElement, StructStack<TemplateContextWrapper>> onUpdate = (a, b, c) => b.OnUpdate();
+
         // load dll and copy array or call compile on all the fns.
         public void Build() {
             contextProviderFns = new Func<UIElement, UIElement, TemplateContext>[contextProviderLambdas.Count];
+
             for (int i = 0; i < contextProviderLambdas.Count; i++) {
                 contextProviderFns[i] = (Func<UIElement, UIElement, TemplateContext>) contextProviderLambdas[i].Compile();
             }
 
             sharedBindingFns = new Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>[sharedBindingLambdas.Count];
-            for (int i = 0; i < contextProviderLambdas.Count; i++) {
-                sharedBindingFns[i] = (Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>) sharedBindingLambdas[i].Compile();
+
+            for (int i = 0; i < sharedBindingLambdas.Count; i++) {
+                if (sharedBindingLambdas[i] == null) {
+                    // todo -- this is shitty but it will work, better but more wasteful would be store a tuple of type & lambda
+                    sharedBindingFns[i] = onUpdate;
+                }
+                else {
+                    sharedBindingFns[i] = (Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>) sharedBindingLambdas[i].Compile();
+                }
             }
         }
 
