@@ -29,6 +29,7 @@ namespace UIForia.Compilers {
         public LightStack<Expression> bindingNodeStack;
         public LightList<ParameterExpression> variables;
         public LightStack<LightList<Expression>> statementStacks;
+        public LightStack<TemplateContextDefinition> contextProviderStack;
 
         public Expression rootParam;
         public Expression templateData;

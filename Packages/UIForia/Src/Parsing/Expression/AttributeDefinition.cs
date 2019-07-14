@@ -3,13 +3,17 @@ using System.Diagnostics;
 
 namespace UIForia.Parsing.Expression {
 
+    // order is important because this is a sort key
     [Flags]
     public enum AttributeType : ushort {
 
-        Property = 1 << 0,
-        Style = 1 << 1,
-        Attribute = 1 << 2,
-        Event = 1 << 3,
+        Context = 1 << 0,
+        ContextVariable = 1 << 1,
+        Alias = 1 << 2,
+        Property = 1 << 3,
+        Style = 1 << 4,
+        Attribute = 1 << 5,
+        Event = 1 << 6,
 
     }
 

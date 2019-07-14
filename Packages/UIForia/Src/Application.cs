@@ -19,7 +19,7 @@ using UnityEngine;
 namespace UIForia {
 
     public abstract class Application {
-        
+
 #if UNITY_EDITOR
         public static List<Application> Applications = new List<Application>();
 #endif
@@ -58,6 +58,8 @@ namespace UIForia {
         public event Action<UIView[]> onViewsSorted;
         public event Action<UIView> onViewRemoved;
 
+        internal TemplateData templateData;
+
         protected internal readonly List<UIView> m_Views;
 
         public static readonly List<IAttributeProcessor> s_AttributeProcessors;
@@ -75,7 +77,7 @@ namespace UIForia {
         protected readonly SkipTree<UIElement> updateTree;
         public static readonly UIForiaSettings Settings;
         private ElementPool elementPool;
-        
+
         static Application() {
             ArrayPool<UIElement>.SetMaxPoolSize(64);
             s_AttributeProcessors = new List<IAttributeProcessor>();
@@ -103,12 +105,14 @@ namespace UIForia {
                 if (parent.isEnabled) {
                     retn.flags |= UIElementFlags.Enabled;
                 }
+
                 retn.depth = parent.depth + 1;
                 retn.View = parent.View;
             }
+
             return retn;
         }
-        
+
         protected Application(string id, string templateRootPath = null) {
             this.id = id;
             this.templateRootPath = templateRootPath;
@@ -119,7 +123,9 @@ namespace UIForia {
             }
 
             s_ApplicationList.Add(this);
-
+            
+            this.templateData = new TemplateData(); // todo -- load this from elsewhere in the pre-generated case
+            
             this.elementPool = new ElementPool();
             this.m_Systems = new List<ISystem>();
             this.m_Views = new List<UIView>();
@@ -155,7 +161,7 @@ namespace UIForia {
             Applications.Add(this);
 #endif
         }
-        
+
         internal static void ProcessClassAttributes(Type type, Attribute[] attrs) {
             for (var i = 0; i < attrs.Length; i++) {
                 Attribute attr = attrs[i];
@@ -189,7 +195,7 @@ namespace UIForia {
         public string TemplateRootPath {
             get {
                 if (templateRootPath == null) {
-                    return string.Empty;// UnityEngine.Application.dataPath;
+                    return string.Empty; // UnityEngine.Application.dataPath;
                 }
 
                 return templateRootPath;
@@ -211,26 +217,26 @@ namespace UIForia {
         internal void HydrateTemplate(int templateId, UIElement parent, TemplateScope2 scope) {
             templateCache.compiledTemplates[templateId].Create(parent, scope);
         }
-        
+
         // always creates the root
         internal UIElement CreateSubTemplate(int templateId, UIElement parent, TemplateScope2 scope) {
             return templateCache.compiledTemplates[templateId].Create(parent, scope);
         }
-        
-        
+
+
         internal TemplateCache templateCache = new TemplateCache();
-        
+
         internal class TemplateCache {
 
             internal LightList<CompiledTemplate> compiledTemplates = new LightList<CompiledTemplate>();
-            
+
             public void Add(CompiledTemplate retn) {
                 retn.templateId = compiledTemplates.Count;
                 compiledTemplates.Add(retn);
             }
 
         }
-        
+
         public void SetCamera(Camera camera) {
             Camera = camera;
             RenderSystem.SetCamera(camera);
@@ -239,7 +245,6 @@ namespace UIForia {
         private int nextViewId = 0;
 
         public UIView CreateView(string name, Rect rect, Type type, string template = null) {
-
             UIView view = GetView(name);
 
             if (view == null) {
@@ -258,6 +263,7 @@ namespace UIForia {
                 if (view.RootElement.GetType() != type) {
                     throw new Exception($"A view named {name} with another root type ({view.RootElement.GetType()}) already exists.");
                 }
+
                 view.Viewport = rect;
             }
 
@@ -324,7 +330,7 @@ namespace UIForia {
             // copy the list here because there might be view-sorting going on during view.initialize() 
             LightList<UIView> views = LightList<UIView>.Get();
             views.AddRange(m_Views);
-            
+
             // todo -- store root view, rehydrate. kill the rest
             for (int i = 0; i < views.Count; i++) {
                 for (int j = 0; j < m_Systems.Count; j++) {
@@ -333,7 +339,7 @@ namespace UIForia {
 
                 views[i].Initialize();
             }
-            
+
             LightList<UIView>.Release(ref views);
 
             onRefresh?.Invoke();
@@ -343,7 +349,6 @@ namespace UIForia {
         }
 
         public void Destroy() {
-
 #if UNITY_EDITOR
             Applications.Remove(this);
 #endif
@@ -588,8 +593,8 @@ namespace UIForia {
             // if element is not enabled (ie has a disabled ancestor), no-op 
             if (!element.isEnabled) return;
 
-            int targetPhase = -1; 
-            
+            int targetPhase = -1;
+
             UIElement ptr = element.parent;
             if (!ptr.isReady) {
                 while (ptr != null) {
@@ -647,7 +652,7 @@ namespace UIForia {
                 LightStack<UIElement>.Release(ref stack);
                 return;
             }
-            
+
             element.flags |= UIElementFlags.AncestorEnabled;
 
             foreach (ISystem system in m_Systems) {
@@ -956,7 +961,7 @@ namespace UIForia {
         }
 
         internal LightList<SlotUsageTemplate> slotUsageTemplates = new LightList<SlotUsageTemplate>(128);
-        
+
         // todo we will want to not compile this here, explore jitting this
         internal int AddSlotUsageTemplate(Expression<SlotUsageTemplate> lambda) {
             slotUsageTemplates.Add(lambda.Compile());
@@ -976,34 +981,32 @@ namespace UIForia {
             element = null;
             return false;
         }
-        
+
         internal UIElement CreateSlot(StructList<SlotUsage> slots, string targetSlot, LinqBindingNode bindingNode, UIElement parent, UIElement root, CompiledTemplate defaultTemplateData, int defaultTemplateId) {
             UIElement element;
-            
-           if (slots == null) {
-               element = slotUsageTemplates[defaultTemplateId].Invoke(this, bindingNode, parent, new LexicalScope(root, defaultTemplateData));
-               element.View = parent.View;
-               element.parent = parent;
-               return element;
-           }
-            
-           SlotUsage[] array = slots.array;
-           for (int i = 0; i < slots.size; i++) {
-               if (array[i].slotName == targetSlot) {
-                   element = slotUsageTemplates[array[i].templateId].Invoke(this, bindingNode, parent, array[i].lexicalScope);
-                   element.parent = parent;
-                   element.View = parent.View;
-                   return element;
-               }
-           }
-           
-           element = slotUsageTemplates[defaultTemplateId].Invoke(this, bindingNode, parent, new LexicalScope(root, defaultTemplateData));
-           element.View = parent.View;
-           element.parent = parent;
-           return element;
-           
+
+            if (slots == null) {
+                element = slotUsageTemplates[defaultTemplateId].Invoke(this, bindingNode, parent, new LexicalScope(root, defaultTemplateData));
+                element.View = parent.View;
+                element.parent = parent;
+                return element;
+            }
+
+            SlotUsage[] array = slots.array;
+            for (int i = 0; i < slots.size; i++) {
+                if (array[i].slotName == targetSlot) {
+                    element = slotUsageTemplates[array[i].templateId].Invoke(this, bindingNode, parent, array[i].lexicalScope);
+                    element.parent = parent;
+                    element.View = parent.View;
+                    return element;
+                }
+            }
+
+            element = slotUsageTemplates[defaultTemplateId].Invoke(this, bindingNode, parent, new LexicalScope(root, defaultTemplateData));
+            element.View = parent.View;
+            element.parent = parent;
+            return element;
         }
-        
 
     }
 

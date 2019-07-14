@@ -15,18 +15,11 @@ namespace UIForia.Compilers {
 
     public class TemplateContextTreeDefinition { }
 
-    public class LinqStyleCompiler {
-
-        public LinqBinding Compile(Type rootType, Type elementType, TemplateContextTreeDefinition ctx, in AttributeDefinition2 attributeDefinition) {
-            return null;
-        }
-
-    }
-
     public class TemplateCompiler {
 
         public Application application;
         private int varId;
+        private LinqCompiler linqCompiler;
 
         public LinqStyleCompiler styleCompiler;
         public LinqPropertyCompiler propertyCompiler;
@@ -49,16 +42,20 @@ namespace UIForia.Compilers {
         private static readonly ConstructorInfo s_TemplateScope_Ctor = typeof(TemplateScope2).GetConstructor(new[] {typeof(Application), typeof(LinqBindingNode), typeof(StructList<SlotUsage>)});
         private static readonly FieldInfo s_TemplateScope_SlotInputList = typeof(TemplateScope2).GetField(nameof(TemplateScope2.slotInputs));
         private static readonly ConstructorInfo s_LexicalScope_Ctor = typeof(LexicalScope).GetConstructor(new[] {typeof(UIElement), typeof(CompiledTemplate)});
+        private static readonly FieldInfo s_StructList_SlotUsage_Array = typeof(StructList<SlotUsage>).GetField(nameof(StructList<SlotUsage>.array));
 
         private static readonly FieldInfo s_ElementAttributeList = typeof(UIElement).GetField("attributes", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        private static readonly MethodInfo s_BindingNode_AddChild = typeof(LinqBindingNode).GetMethod(nameof(LinqBindingNode.AddChild), BindingFlags.Public | BindingFlags.Instance);
         private static readonly FieldInfo s_Element_ChildrenList = typeof(UIElement).GetField(nameof(UIElement.children), BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo s_LightList_Element_Array = typeof(LightList<UIElement>).GetField(nameof(LightList<UIElement>.array), BindingFlags.Public | BindingFlags.Instance);
         private static readonly MethodInfo s_Application_HydrateTemplate = typeof(Application).GetMethod(nameof(Application.HydrateTemplate), BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo s_TextElement_Text = typeof(UITextElement).GetField(nameof(UITextElement.text), BindingFlags.Instance | BindingFlags.NonPublic);
 
         private static readonly MethodInfo s_Application_CreateSlot = typeof(Application).GetMethod(nameof(Application.CreateSlot), BindingFlags.NonPublic | BindingFlags.Instance);
-
+        private static readonly FieldInfo s_Application_TemplateData = typeof(Application).GetField(nameof(Application.templateData), BindingFlags.NonPublic | BindingFlags.Instance);
+        
+        private static readonly MethodInfo s_BindingNode_AddChild = typeof(LinqBindingNode).GetMethod(nameof(LinqBindingNode.AddChild), BindingFlags.Public | BindingFlags.Instance);
+        private static readonly MethodInfo s_BindingNode_SetContextProvider = typeof(LinqBindingNode).GetMethod(nameof(LinqBindingNode.SetContextProvider), BindingFlags.Public | BindingFlags.Instance);
+    
         private static readonly ConstructorInfo s_SlotUsage_Ctor = typeof(SlotUsage).GetConstructor(new[] {typeof(string), typeof(int), typeof(LexicalScope)});
 
         private static readonly FieldInfo s_LexicalScope_root = typeof(LexicalScope).GetField(nameof(LexicalScope.root), BindingFlags.Instance | BindingFlags.Public);
@@ -142,22 +139,6 @@ namespace UIForia.Compilers {
             return compiledTemplate;
         }
 
-        private static void LogCode(Expression expression, bool printNamespaces = false) {
-            bool old = CSharpWriter.printNamespaces;
-            CSharpWriter.printNamespaces = printNamespaces;
-            string retn = expression.ToCSharpCode();
-            CSharpWriter.printNamespaces = old;
-            Debug.Log(retn);
-        }
-
-        private static void LogCode(string comment, Expression expression, bool printNamespaces = false) {
-            bool old = CSharpWriter.printNamespaces;
-            CSharpWriter.printNamespaces = printNamespaces;
-            string retn = expression.ToCSharpCode();
-            CSharpWriter.printNamespaces = old;
-            Debug.Log(comment);
-            Debug.Log(retn + "\n");
-        }
 
         private CompiledTemplate Compile(TemplateAST ast) {
             CompiledTemplate retn = new CompiledTemplate();
@@ -201,7 +182,7 @@ namespace UIForia.Compilers {
 
                 ctx.AddStatement(Expression.Assign(ctx.rootParam, createRootExpression));
 
-                ProcessAttributes(retn, null, ast.root.attributes, ctx, out bool hasBindings);
+                ProcessAttributes(processedType.rawType, retn, null, ast.root.attributes, ctx, out bool hasBindings, out bool hasContextProvider);
 
                 BlockExpression createUnscopedBlock = ctx.PopBlock();
 
@@ -298,14 +279,18 @@ namespace UIForia.Compilers {
             // templates can only exist at the root level (or better maybe outside in a <Templates> tag
             // need to store incoming template scope, or at minimum the slotInputs on it if there are any
             // best to gather a list of templates to store and do them all at once, emit a single call to element.StoreTemplates(slotInputs, root (which is always == this), compiledTemplate (which should maybe be made available on element) new [] { templatesToStore })
-            
+
+            // since I know where the slotusage came from maybe i don't need to alloc arrays for them, handled by template code itself
+            // attributes
+            // styles
+            // bindings
+            // context
             // element.StoreTemplates(compiledTemplate, scope.inputSlots.ToArray(), new int[] { new StoredTemplate("TemplateName1", templateFnId1), new StoredTemplate("TemplateName2", templateFnId2) });
-            
+
             // this method should return which input slots it requires so they can be saved.
             // do a gather phase, then output data as code.
-            
         }
-        
+
         private ParameterExpression VisitSlotDefinition(TemplateNode templateNode, CompilationContext ctx, CompiledTemplate template) {
             ProcessedType processedType = templateNode.processedType;
             Type type = processedType.rawType;
@@ -339,7 +324,7 @@ namespace UIForia.Compilers {
                 CompileToStoredSlot(templateNode, ctx, template);
                 return null;
             }
-            
+
             ParameterExpression nodeExpr = ctx.ElementExpr;
 
             bool hasBindings = false;
@@ -379,12 +364,19 @@ namespace UIForia.Compilers {
                 return VisitSlotDefinition(templateNode, ctx, template);
             }
 
+//            if (templateNode.isStoredTemplate) {
+//                if (templateNode.parent != templateNode.astRoot.root) {
+//                    // throw new InvalidTemplateException();
+//                }
+//            }
+
             Type type = processedType.rawType;
             ctx.elementType = type;
 
             ParameterExpression nodeExpr = ctx.ElementExpr;
 
             bool hasBindings;
+            bool hasContextProvider;
 
             ctx.AddStatement(
                 Expression.Assign(nodeExpr, Expression.Call(ctx.applicationExpr, s_CreateFromPool, Expression.Constant(type), ctx.ParentExpr, Expression.Constant(templateNode.children.size)))
@@ -400,10 +392,6 @@ namespace UIForia.Compilers {
                 ));
             }
 
-            if (processedType.isContextProvider) {
-                // update context tree
-            }
-
             if (processedType.requiresTemplateExpansion) {
                 CompiledTemplate compiled = GetCompiledTemplate(processedType);
 
@@ -413,7 +401,7 @@ namespace UIForia.Compilers {
                 // merge bindings, outer ones win, take the base bindings and replace duplicates with outer ones
                 StructList<AttributeDefinition2> attributes = MergeAttributes(compiled.attributes, templateNode.attributes);
 
-                ProcessAttributes(template, compiled, attributes, ctx, out hasBindings);
+                ProcessAttributes(template, compiled, attributes, ctx, out hasBindings, out hasContextProvider);
 
                 Expression templateScopeCtor;
 
@@ -457,7 +445,7 @@ namespace UIForia.Compilers {
                 }
             }
             else {
-                ProcessAttributes(template, null, templateNode.attributes, ctx, out hasBindings);
+                ProcessAttributes(template, null, templateNode.attributes, ctx, out hasBindings, out hasContextProvider);
                 VisitChildren(templateNode, ctx, template);
             }
 
@@ -465,15 +453,20 @@ namespace UIForia.Compilers {
                 ctx.bindingNodeStack.Pop();
             }
 
+            if (hasContextProvider) {
+                ctx.contextProviderStack.Pop();
+            }
+
             return nodeExpr;
         }
 
-        private static readonly FieldInfo s_StructList_SlotUsage_Array = typeof(StructList<SlotUsage>).GetField(nameof(StructList<SlotUsage>.array));
 
-        private void ProcessAttributes(CompiledTemplate outerTemplate, CompiledTemplate innerTemplate, StructList<AttributeDefinition2> attributes, in CompilationContext ctx, out bool hasBindings) {
+        private void ProcessAttributes(ProcessedType processedType, CompiledTemplate outerTemplate, CompiledTemplate innerTemplate, StructList<AttributeDefinition2> attributes, in CompilationContext ctx, out bool hasBindings, out bool hasContextProvider) {
             int attrCount = attributes.size;
 
             hasBindings = false;
+            hasContextProvider = false;
+
             if (attrCount == 0) {
                 return;
             }
@@ -482,6 +475,11 @@ namespace UIForia.Compilers {
 
             AttributeDefinition2[] attributeDefinitions = attributes.array;
 
+            int statementId = ctx.statementStacks.PeekUnchecked().size;
+            // always get it, if not used, remove it again
+            
+            ctx.AllocateBindingNode();
+            
             int startIdx = 0;
             bool hasAttrBindings = false;
             bool hasPropertyBindings = false;
@@ -500,13 +498,83 @@ namespace UIForia.Compilers {
                         case AttributeType.Style:
                             EmitStyles(attributes, ctx, startIdx, i + 1, out hasStyleBindings);
                             break;
+
+                        case AttributeType.Context:
+                            EmitContexts(attributeDefinitions, ctx, startIdx, i + 1, out hasContextProvider);
+                            break;
+
+                        case AttributeType.ContextVariable:
+                            break;
+
+                        case AttributeType.Alias:
+                            break;
                     }
 
                     startIdx = i + 1;
                 }
             }
 
+
+            if (processedType.requiresUpdateFn) {
+                
+            }
+            
             hasBindings = hasAttrBindings || hasPropertyBindings || hasStyleBindings;
+
+            if (!hasBindings && !hasContextProvider) {
+                ctx.RemoveStatement(statementId);
+            }
+            
+        }
+
+        private void EmitContexts(AttributeDefinition2[] attributeDefinitions, CompilationContext ctx, int start, int end, out bool hasContextProvider) {
+            hasContextProvider = end - start == 1;
+            // assume only 1 for now
+            if (end - start != 1) {
+                throw new Exception("We only support 1 context currently");
+            }
+
+            AttributeDefinition2 attr = attributeDefinitions[start];
+
+            ctx.contextProviderStack = ctx.contextProviderStack ?? new LightStack<TemplateContextDefinition>();
+
+            // currently don't support aliases or other refs in this expression type
+            LambdaExpression expression = CompileContextExpression(attr.value);
+
+            int expressionId = application.templateData.AddContextProviderLambda(expression);
+            
+            ctx.contextProviderStack.Push(new TemplateContextDefinition() {
+                name = attr.key,
+                expressionId = expressionId,
+                type = expression.Type,
+                id = TemplateContextDefinition.IdGenerator++,
+            });
+
+            Expression fnLookup = Expression.Field(ctx.applicationExpr, s_Application_TemplateData);
+            Expression arrayLookup = Expression.ArrayAccess(fnLookup, Expression.Constant(expressionId));
+            Expression createContext = Expression.Invoke(arrayLookup, ctx.rootParam, ctx.ElementExpr);
+            
+            // bindingNode.SetContextProvider(scope.application.templateData[24](root, element), id);
+            ctx.AddStatement(
+                Expression.Call(ctx.GetBindingNode(), s_BindingNode_SetContextProvider, createContext, Expression.Constant(ctx.contextProviderStack.PeekUnchecked().id))
+            );
+            
+        }
+
+        private LambdaExpression CompileContextExpression(string input) {
+            linqCompiler = linqCompiler ?? new LinqCompiler();
+
+            linqCompiler.SetSignature<TemplateContext>(
+                new Parameter(typeof(UIElement), "root", ParameterFlags.NeverNull),
+                new Parameter(typeof(UIElement), "element", ParameterFlags.NeverNull)
+            );
+            linqCompiler.Return(input);
+
+            LambdaExpression lambdaExpression = linqCompiler.BuildLambda();
+
+            linqCompiler.Reset();
+
+            return lambdaExpression;
         }
 
         private void EmitProperties(CompiledTemplate template, CompiledTemplate innerTemplate, StructList<AttributeDefinition2> attributes, in CompilationContext ctx, int startIdx, int endIndex, out bool hasBindings) {
@@ -707,6 +775,24 @@ namespace UIForia.Compilers {
             }
 
             return mergedAttributes;
+        }
+
+
+        private static void LogCode(Expression expression, bool printNamespaces = false) {
+            bool old = CSharpWriter.printNamespaces;
+            CSharpWriter.printNamespaces = printNamespaces;
+            string retn = expression.ToCSharpCode();
+            CSharpWriter.printNamespaces = old;
+            Debug.Log(retn);
+        }
+
+        private static void LogCode(string comment, Expression expression, bool printNamespaces = false) {
+            bool old = CSharpWriter.printNamespaces;
+            CSharpWriter.printNamespaces = printNamespaces;
+            string retn = expression.ToCSharpCode();
+            CSharpWriter.printNamespaces = old;
+            Debug.Log(comment);
+            Debug.Log(retn + "\n");
         }
 
     }

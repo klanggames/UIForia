@@ -8,39 +8,16 @@ using UIForia.Util;
 
 namespace UIForia.Compilers {
 
-    public readonly struct LexicalScope {
-
-        public readonly UIElement root;
-        public readonly CompiledTemplate data;
-
-        public LexicalScope(UIElement root, CompiledTemplate data) {
-            this.root = root;
-            this.data = data;
-        }
-
-    }
-
-    public readonly struct SlotUsage {
-
-        public readonly string slotName;
-        public readonly int templateId;
-        public readonly LexicalScope lexicalScope;
-
-        public SlotUsage(string slotName, int templateId, LexicalScope lexicalScope) {
-            this.slotName = slotName;
-            this.templateId = templateId;
-            this.lexicalScope = lexicalScope;
-        }
-
-    }
-
-    internal delegate UIElement SlotUsageTemplate(Application application, LinqBindingNode bindingNode, UIElement parent, LexicalScope lexicalScope);
-
     public class CompiledTemplate {
 
         internal Expression<Func<UIElement, TemplateScope2, CompiledTemplate, UIElement>> buildExpression;
         internal Func<UIElement, TemplateScope2, CompiledTemplate, UIElement> createFn;
+        
+        // todo -- these can be global and just live in large arrays
         internal LightList<LinqBinding> sharedBindings = new LightList<LinqBinding>();
+        internal LightList<LinqBinding> instanceBindings = new LightList<LinqBinding>();
+        internal LightList<Func<UIElement, UIElement, TemplateContext>> contextProviders;
+        
         internal ProcessedType elementType;
         internal AttributeDefinition2[] attributes;
         public string fileName;

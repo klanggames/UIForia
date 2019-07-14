@@ -8,6 +8,7 @@ using UIForia.Compilers.ExpressionResolvers;
 using UIForia.Elements;
 using UIForia.Exceptions;
 using UIForia.Templates;
+using UIForia.Util;
 using Debug = UnityEngine.Debug;
 
 namespace UIForia.Parsing.Expression {
@@ -24,15 +25,19 @@ namespace UIForia.Parsing.Expression {
         public readonly TemplateAttribute templateAttr;
         public readonly Action<IList<ExpressionAliasResolver>, AttributeList> getResolvers;
         public readonly bool requiresTemplateExpansion;
-        public bool isContextProvider;
+        public bool requiresUpdateFn;
 
         public ProcessedType(Type rawType, TemplateAttribute templateAttr) {
             this.rawType = rawType;
             this.templateAttr = templateAttr;
             this.getResolvers = null;
+            
             // todo -- remove this and replace with a better way to introduce context
+            
             MethodInfo info = rawType.GetMethod("GetAliasResolvers", BindingFlags.Static | BindingFlags.NonPublic, null, s_Signature, null);
-            this.isContextProvider = false;
+            
+            requiresUpdateFn = ReflectionUtil.IsOverride(rawType.GetMethod(nameof(UIElement.OnUpdate)));
+            
             if (info != null) {
                 this.getResolvers = (Action<IList<ExpressionAliasResolver>, AttributeList>) Delegate.CreateDelegate(
                     typeof(Action<IList<ExpressionAliasResolver>, AttributeList>), info

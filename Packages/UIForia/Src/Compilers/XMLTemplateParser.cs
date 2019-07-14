@@ -58,6 +58,8 @@ namespace UIForia.Compilers {
             nameSpaceManager.AddNamespace("attr", "attr");
             nameSpaceManager.AddNamespace("evt", "evt");
             nameSpaceManager.AddNamespace("style", "style");
+            nameSpaceManager.AddNamespace("ctx", "ctx");
+            nameSpaceManager.AddNamespace("ctxvar", "ctxvar");
             for (int i = 0; i < s_Directives.Length; i++) {
                 nameSpaceManager.AddNamespace(s_Directives[i], s_Directives[i]);
             }
@@ -194,6 +196,16 @@ namespace UIForia.Compilers {
                         case "evt":
                             attributeType = AttributeType.Event;
                             break;
+                        case "ctx":
+                            attributeType = AttributeType.Context;
+                            break;
+                        case "ctxvar":
+                            attributeType = AttributeType.ContextVariable;
+                            break;
+                        case "alias":
+                            attributeType = AttributeType.Alias;
+                            break;
+                        
                         default:
                             throw new ArgumentOutOfRangeException("Unknown attribute prefix: " + prefix);
                     }

@@ -20,15 +20,21 @@ namespace UIForia.Systems {
         internal LinqBinding enabledBinding;
         internal LinqBindingSystem system;
 
+        internal TemplateContextWrapper contextWrapper;
+
         public LinqBindingNode() {
-            this.children = new LightList<LinqBindingNode>(4);    
+            this.children = new LightList<LinqBindingNode>(4);
         }
-        
+
         public void AddChild(LinqBindingNode childNode) {
             children.Add(childNode);
         }
 
-        public void Update() {
+        public void SetContextProvider(TemplateContext context, int id) {
+            contextWrapper = new TemplateContextWrapper(context, id);
+        }
+
+        public void Update(StructStack<TemplateContextWrapper> contextStack) {
             system.currentlyActive = this;
 
             enabledBinding?.Execute(root, element, ctx);
@@ -54,13 +60,23 @@ namespace UIForia.Systems {
 
             int activePhase = system.currentPhase;
 
+            // todo if doing an out of order binding run we need to be sure the context stack is saved / restored 
+            
+            if (contextWrapper.context != null) {
+                contextStack.Push(contextWrapper);
+            }
+
             while (iteratorIndex < children.Count) {
                 LinqBindingNode child = children.Array[iteratorIndex++];
 
                 if (child.phase != activePhase) {
-                    child.Update();
+                    child.Update(contextStack);
                     system.currentlyActive = this;
                 }
+            }
+
+            if (contextWrapper.context != null) {
+                contextStack.Pop();
             }
 
             iteratorIndex = -1;
