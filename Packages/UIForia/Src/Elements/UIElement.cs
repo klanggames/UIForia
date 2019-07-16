@@ -6,8 +6,10 @@ using UIForia.Compilers;
 using UIForia.Elements.Routing;
 using UIForia.Expressions;
 using UIForia.Layout;
+using UIForia.Layout.LayoutTypes;
 using UIForia.Rendering;
 using UIForia.Routing;
+using UIForia.Selectors;
 using UIForia.Systems;
 using UIForia.Templates;
 using UIForia.UIInput;
@@ -96,7 +98,6 @@ namespace UIForia.Elements {
     public class UIElement : IHierarchical {
 
         public readonly int id;
-        public readonly UIStyleSet style;
 
         internal LightList<UIElement> children; // todo -- replace w/ linked list & child count
 
@@ -111,11 +112,18 @@ namespace UIForia.Elements {
 
         internal static IntMap<ElementColdData> s_ColdDataMap = new IntMap<ElementColdData>();
 
+        public readonly UIStyleSet style;
         internal LinqBindingNode bindingNode;
-
+        internal SelectorNode selectorNode;
+        
         internal StructList<ElementAttribute> attributes;
         
         public UIView View { get; internal set; }
+        
+        public Vector2 scrollOffset { get; internal set; }
+
+        public int depth { get; internal set; }
+        public int siblingIndex { get; internal set; }
         
         // todo -- move this
         public ArrayContainer<StoredTemplate> storedTemplates;
@@ -149,10 +157,6 @@ namespace UIForia.Elements {
             }
         }
 
-        public Vector2 scrollOffset { get; internal set; }
-
-        public int depth { get; internal set; }
-        public int siblingIndex { get; internal set; }
 
         public IInputProvider Input => View.Application.InputSystem;
 
@@ -373,11 +377,30 @@ namespace UIForia.Elements {
         }
 
         public void SetAttribute(string name, string value) {
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            string oldValue = coldData.GetAttribute(name).value;
-            coldData.SetAttribute(name, value);
-            s_ColdDataMap[id] = coldData;
-            Application.OnAttributeSet(this, name, value, oldValue);
+            if (attributes == null) {
+                attributes = StructList<ElementAttribute>.Get();
+            }
+
+            ElementAttribute[] attrs = attributes.array;
+            int attrCount = attributes.size;
+            
+            for (int i = 0; i < attrCount; i++) {
+                if (attrs[i].name == name) {
+                    if (attrs[i].value == value) {
+                        return;
+                    }
+                    else {
+                        string oldValue = attrs[i].value;
+                        attrs[i] = new ElementAttribute(name, value);
+                        Application.OnAttributeSet(this, name, value, oldValue);
+                        return;
+                    }
+                }    
+            }
+            
+            attributes.Add(new ElementAttribute(name, value));
+            // coldData.onAttributeSet?.Invoke(this, name, value, oldValue);
+            Application.OnAttributeAdded(this, name, value);
         }
 
         public string GetAttribute(string attr) {
@@ -389,47 +412,8 @@ namespace UIForia.Elements {
             return null;
         }
 
-        public void OnAttributeAdded(Action<ElementAttribute> handler) {
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            coldData.onAttributeAdded += handler;
-            s_ColdDataMap[id] = coldData;
-        }
-
-        public void OnAttributeChanged(Action<ElementAttribute> handler) {
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            coldData.onAttributeChanged += handler;
-            s_ColdDataMap[id] = coldData;
-        }
-
-        public void OnAttributeRemoved(Action<ElementAttribute> handler) {
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            coldData.onAttributeRemoved += handler;
-            s_ColdDataMap[id] = coldData;
-        }
-
         public bool HasAttribute(string name) {
             return s_ColdDataMap.GetOrDefault(id).GetAttribute(name).value != null;
-        }
-
-        // todo -- remove
-        public IRouterElement GetNearestRouter() {
-            UIElement ptr = this;
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            if (coldData.nearestRouter != null) {
-                return coldData.nearestRouter;
-            }
-
-            while (ptr != null) {
-                if (ptr is IRouterElement routeElement) {
-                    coldData.nearestRouter = routeElement;
-                    s_ColdDataMap[id] = coldData;
-                    return routeElement;
-                }
-
-                ptr = ptr.parent;
-            }
-
-            return null;
         }
 
         // todo remove
@@ -444,14 +428,6 @@ namespace UIForia.Elements {
                 ptr = ptr.parent;
             }
 
-            return default;
-        }
-
-        internal void StoreTemplate(StoredTemplate storedTemplate) {
-            
-        }
-
-        public StoredTemplate GetStoredTemplate(string templateName) {
             return default;
         }
         
@@ -499,29 +475,7 @@ namespace UIForia.Elements {
             return false;
         }
 
-        internal UIElementTypeData GetTypeData() {
-            UIElementTypeData typeData = default;
-            Type elementType = GetType();
-            if (s_TypeDataMap.TryGetValue(elementType, out typeData)) {
-                return typeData;
-            }
-            else {
-                typeData.requiresUpdate = ReflectionUtil.IsOverride(elementType.GetMethod(nameof(OnUpdate)));
-                //typeData.attributes = elementType.GetCustomAttributes();
-                s_TypeDataMap[elementType] = typeData;
-                return typeData;
-            }
-        }
-
-        private static readonly Dictionary<Type, UIElementTypeData> s_TypeDataMap = new Dictionary<Type, UIElementTypeData>();
-
-        internal struct UIElementTypeData {
-
-            public bool requiresUpdate;
-            // public Attribute[] attributes;
-
-        }
-
+        
     }
 
 }

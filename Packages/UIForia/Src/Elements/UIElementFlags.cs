@@ -19,9 +19,26 @@ internal enum UIElementFlags {
     SelfAndAncestorEnabled = Enabled | AncestorEnabled,
 
     Ready = 1 << 13,
-    
+
     Registered = 1 << 14,
 
-    DebugLayout = 1 << 15
+    DebugLayout = 1 << 15,
+
+
+    Selector_AttributeAdded = 1 << 17,
+    Selector_AttributeChanged = 1 << 18,
+    Selector_AttributeRemoved = 1 << 19,
+    Selector_SiblingIndexChanged = 1 << 20,
+    Selector_ChildAdded = 1 << 21,
+    Selector_ChildRemoved = 1 << 22,
+
+    SelectorNeedsUpdate = (
+        Selector_AttributeAdded |
+        Selector_AttributeChanged |
+        Selector_AttributeRemoved |
+        Selector_ChildAdded |
+        Selector_ChildRemoved |
+        Selector_SiblingIndexChanged
+    )
 
 }

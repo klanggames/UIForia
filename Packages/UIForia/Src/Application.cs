@@ -75,9 +75,9 @@ namespace UIForia {
         private readonly UITaskSystem m_BeforeUpdateTaskSystem;
         private readonly UITaskSystem m_AfterUpdateTaskSystem;
 
-        protected readonly SkipTree<UIElement> updateTree;
         public static readonly UIForiaSettings Settings;
         private ElementPool elementPool;
+        private LightList<UIElement> selectorUpdates;
 
         static Application() {
             ArrayPool<UIElement>.SetMaxPoolSize(64);
@@ -124,15 +124,15 @@ namespace UIForia {
             }
 
             s_ApplicationList.Add(this);
-            
+
             this.templateData = new TemplateData(); // todo -- load this from elsewhere in the pre-generated case
             this.templateCompiler = new TemplateCompiler(this);
-            
+
             this.elementPool = new ElementPool();
             this.m_Systems = new List<ISystem>();
             this.m_Views = new List<UIView>();
-            this.updateTree = new SkipTree<UIElement>();
-
+            this.selectorUpdates = new LightList<UIElement>();
+            
             m_StyleSystem = new StyleSystem();
             m_BindingSystem = new BindingSystem();
             m_LayoutSystem = new LayoutSystem(this, m_StyleSystem);
@@ -216,27 +216,8 @@ namespace UIForia {
         public LinqBindingSystem LinqBindingSystem => linqBindingSystem;
 
         // Doesn't expect to create the root
-        internal void HydrateTemplate(int templateId, UIElement parent, TemplateScope2 scope) {
-            templateCache.compiledTemplates[templateId].Create(parent, scope);
-        }
-
-        // always creates the root
-        internal UIElement CreateSubTemplate(int templateId, UIElement parent, TemplateScope2 scope) {
-            return templateCache.compiledTemplates[templateId].Create(parent, scope);
-        }
-
-
-        internal TemplateCache templateCache = new TemplateCache();
-
-        internal class TemplateCache {
-
-            internal LightList<CompiledTemplate> compiledTemplates = new LightList<CompiledTemplate>();
-
-            public void Add(CompiledTemplate retn) {
-                retn.templateId = compiledTemplates.Count;
-                compiledTemplates.Add(retn);
-            }
-
+        internal void HydrateTemplate(int templateId, UIElement root, TemplateScope2 scope) {
+            templateData.templateFns[templateId](root, scope);
         }
 
         public void SetCamera(Camera camera) {
@@ -431,7 +412,6 @@ namespace UIForia {
                 }
             }
 
-            updateTree.RemoveHierarchy(element);
 
             for (int i = 0; i < m_Systems.Count; i++) {
                 m_Systems[i].OnElementDestroyed(element);
@@ -471,7 +451,6 @@ namespace UIForia {
 
             for (int i = 0; i < childCount; i++) {
                 stack.Push(children[i]);
-                updateTree.RemoveHierarchy(children[i]);
             }
 
             while (stack.Count > 0) {
@@ -512,34 +491,31 @@ namespace UIForia {
         }
 
         public void Update() {
-            // todo -- if parent changed we don't want to double update, best to iterate to array & diff a frame id
-            updateTree.ConditionalTraversePreOrder(Time.frameCount, (element, frameId) => {
-                if (element == null) return true; // when would element be null? root?
-                if (element.isDisabled) return false;
-                if (!element.isReady) return true;
-                element.OnUpdate();
-                return true;
-            });
-
-            m_AnimationSystem.OnUpdate();
-
-            m_BindingSystem.OnUpdate();
-
-            m_StyleSystem.OnUpdate();
-
-            m_LayoutSystem.OnUpdate();
-
             m_InputSystem.OnUpdate();
+            linqBindingSystem.OnUpdate();
+            
+            m_StyleSystem.UpdateSelectors();
 
-            m_BeforeUpdateTaskSystem.OnUpdate();
+            UIElement[] elements = selectorUpdates.array;
+            for (int i = 0; i < selectorUpdates.size; i++) {
+                UIElement element = elements[i];
+                if (element.isEnabled) {
+                    element.selectorNode.Update(element);
+                }
 
-            m_InputSystem.OnLateUpdate();
+                element.flags &= ~(UIElementFlags.SelectorNeedsUpdate);
+                
+            }
+            
+            selectorUpdates.QuickClear();
+            
+            m_StyleSystem.UpdateBindings();
+            m_StyleSystem.UpdateAnimations();
+            m_StyleSystem.Flush();
 
-            m_RoutingSystem.OnUpdate();
-
+            // these should be one thing, single pass?
+            m_LayoutSystem.OnUpdate();
             m_RenderSystem.OnUpdate();
-
-            m_AfterUpdateTaskSystem.OnUpdate();
 
             onUpdate?.Invoke();
 
@@ -799,11 +775,7 @@ namespace UIForia {
             return elementMap.GetOrDefault(elementId);
         }
 
-        public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string previousValue) {
-            for (int i = 0; i < m_Systems.Count; i++) {
-                m_Systems[i].OnAttributeSet(element, attributeName, currentValue, previousValue);
-            }
-        }
+     
 
         public static void RefreshAll() {
             for (int i = 0; i < s_ApplicationList.Count; i++) {
@@ -896,13 +868,6 @@ namespace UIForia {
                     current.flags &= ~UIElementFlags.AncestorEnabled;
                 }
 
-                UIElement.UIElementTypeData typeData = current.GetTypeData();
-
-                // todo -- build tree subsection & add it all at once
-                if (typeData.requiresUpdate) {
-                    updateTree.AddItem(current);
-                }
-
                 elementMap[current.id] = current;
 
                 if (!current.isRegistered) {
@@ -956,16 +921,18 @@ namespace UIForia {
 
 
         internal UIElement InsertChildFromTemplate(UIElement parent, in StoredTemplate storedTemplate, uint index) {
-            CompiledTemplate template = templateCache.compiledTemplates[storedTemplate.templateId];
+            // CompiledTemplate template = templateData.templateFns[storedTemplate.templateId];
             // template.CreateStored(parent, storedTemplate.closureRoot, slots?, context? bindingNode?)
-            UIElement child = template.Create(parent, new TemplateScope2(this, null, StructList<SlotUsage>.Get()));
-            return child;
+//            UIElement child = template.Create(parent, new TemplateScope2(this, null, StructList<SlotUsage>.Get()));
+//            return child;
+            throw new NotImplementedException();
         }
 
         internal LightList<SlotUsageTemplate> slotUsageTemplates = new LightList<SlotUsageTemplate>(128);
 
         // todo we will want to not compile this here, explore jitting this
         internal int AddSlotUsageTemplate(Expression<SlotUsageTemplate> lambda) {
+            throw new NotImplementedException(); // todo move this to template data
             slotUsageTemplates.Add(lambda.Compile());
             return slotUsageTemplates.Count - 1;
         }
@@ -1008,6 +975,40 @@ namespace UIForia {
             element.View = parent.View;
             element.parent = parent;
             return element;
+        }
+
+        
+        public void OnAttributeAdded(UIElement element, string name, string value) {
+            
+            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
+                selectorUpdates.Add(element);
+            }
+
+            element.flags |= UIElementFlags.Selector_AttributeAdded;
+        
+        }
+        
+        public void OnAttributeRemoved(UIElement element, string name, string value) {
+            
+            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
+                selectorUpdates.Add(element);
+            }
+
+            element.flags |= UIElementFlags.Selector_AttributeRemoved;
+        
+        }
+        
+        public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string previousValue) {
+            for (int i = 0; i < m_Systems.Count; i++) {
+                m_Systems[i].OnAttributeSet(element, attributeName, currentValue, previousValue);
+            }
+            
+            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
+                selectorUpdates.Add(element);
+            }
+
+            element.flags |= UIElementFlags.Selector_AttributeChanged;
+
         }
 
     }

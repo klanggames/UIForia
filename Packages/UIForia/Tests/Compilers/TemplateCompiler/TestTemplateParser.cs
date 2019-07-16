@@ -233,7 +233,7 @@ public class TestTemplateParser {
          public class CompileAsTemplateFn : UIElement {
              
              public override void OnCreate() {
-                 FindById("attach-point").AddChild(GetStoredTemplate("TemplateSlot"));
+                 //FindById("attach-point").AddChild(GetStoredTemplate("TemplateSlot"));
              }
      
          }
