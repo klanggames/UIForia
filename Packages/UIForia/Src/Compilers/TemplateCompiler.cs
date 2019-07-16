@@ -172,7 +172,6 @@ namespace UIForia.Compilers {
 
             ParameterExpression rootParam = Expression.Parameter(typeof(UIElement), "root");
             ParameterExpression scopeParam = Expression.Parameter(typeof(TemplateScope2), "scope");
-            ParameterExpression templateParam = Expression.Parameter(typeof(CompiledTemplate), "templateData");
 
             CompilationContext ctx = new CompilationContext();
             ctx.rootType = processedType;
@@ -208,7 +207,7 @@ namespace UIForia.Compilers {
 
             ctx.AddStatement(ctx.rootParam); // this is the return value
 
-            retn.templateId = application.templateData.AddTemplate(Expression.Lambda(ctx.Finalize(typeof(UIElement)), rootParam, scopeParam, templateParam));
+            retn.templateId = application.templateData.AddTemplate(Expression.Lambda(ctx.Finalize(typeof(UIElement)), rootParam, scopeParam));
             
             retn.elementType = ast.root.processedType;
             retn.attributes = ast.root.attributes.ToArray();
@@ -353,7 +352,7 @@ namespace UIForia.Compilers {
                     Expression.Call(ctx.applicationExpr, s_Application_CreateSlot,
                         Expression.Field(ctx.templateScope, s_TemplateScope_SlotInputList),
                         Expression.Constant(templateNode.slotName),
-                        Expression.Default(typeof(LinqBindingNode)), // todo -- linq node!
+                        ctx.BindingNodeExpr, //Expression.Default(typeof(LinqBindingNode)), // todo -- linq node!
                         ctx.ParentExpr,
                         ctx.rootParam,
                         ctx.templateData,
@@ -411,8 +410,7 @@ namespace UIForia.Compilers {
             if (processedType.requiresTemplateExpansion) {
                 CompiledTemplate compiled = GetCompiledTemplate(processedType);
 
-                // todo -- binding
-                Expression bindingNode = Expression.Default(typeof(LinqBindingNode));
+                Expression bindingNode = ctx.BindingNodeExpr;
 
                 // merge bindings, outer ones win, take the base bindings and replace duplicates with outer ones
                 MergeAttributes(templateNode, compiled.attributes);
@@ -465,8 +463,6 @@ namespace UIForia.Compilers {
                 // otherwise we get our own array of bindings. 
 
                 ProcessBindings(templateNode, ctx, hasTextBindings);
-
-                // complete bindings before visiting children
 
                 VisitChildren(templateNode, ctx, template);
             }

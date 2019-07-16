@@ -1,8 +1,10 @@
 using System;
 using System.Linq.Expressions;
+using Mono.Linq.Expressions;
 using UIForia.Elements;
 using UIForia.Systems;
 using UIForia.Util;
+using UnityEngine;
 
 namespace UIForia.Compilers {
 
@@ -22,8 +24,7 @@ namespace UIForia.Compilers {
             templateLambdas.Add(expression);
             return templateLambdas.size - 1;
         }
-
-
+        
         internal LightList<LambdaExpression> contextProviderLambdas = new LightList<LambdaExpression>();
         internal LightList<LambdaExpression> sharedBindingLambdas = new LightList<LambdaExpression>();
         internal LightList<LambdaExpression> instanceBindingFns = new LightList<LambdaExpression>();
@@ -37,6 +38,9 @@ namespace UIForia.Compilers {
 
         // load dll and copy array or call compile on all the fns.
         public void Build() {
+            
+            if (templateFns != null) return;
+            
             contextProviderFns = new Func<UIElement, UIElement, TemplateContext>[contextProviderLambdas.Count];
 
             for (int i = 0; i < contextProviderLambdas.Count; i++) {
@@ -51,6 +55,7 @@ namespace UIForia.Compilers {
                     sharedBindingFns[i] = onUpdate;
                 }
                 else {
+                    Debug.Log(sharedBindingLambdas[i].ToCSharpCode());
                     sharedBindingFns[i] = (Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>) sharedBindingLambdas[i].Compile();
                 }
             }

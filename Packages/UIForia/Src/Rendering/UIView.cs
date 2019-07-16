@@ -118,22 +118,10 @@ public class UIView {
             return;
         }
 
-
         CompiledTemplate compiledTemplate = Application.templateCompiler.GetCompiledTemplate(m_ElementType);
         LinqBindingNode bindingNode = new LinqBindingNode();
         UIElement element = compiledTemplate.Create(null, new TemplateScope2(Application, bindingNode, null));
-        
-        UIElement child = null;
-//        if (m_Template != null) {
-//            child = Application.templateParser.ParseTemplateFromString(m_ElementType, m_Template).Create();
-//        }
-//        else {
-//            child = Application.templateParser.GetParsedTemplate(m_ElementType).Create();
-//        }
-
-        if (child != null) {
-            this.rootElement.AddChild(child);
-        }
+        rootElement.AddChild(element);
     }
     
     public int GetElementCount() {

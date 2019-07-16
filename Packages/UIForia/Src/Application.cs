@@ -159,6 +159,10 @@ namespace UIForia {
             m_BeforeUpdateTaskSystem = new UITaskSystem();
             m_AfterUpdateTaskSystem = new UITaskSystem();
 
+            if (settings.usePreCompiledTemplates) {
+                // todo -- load templates
+            }
+            
 #if UNITY_EDITOR
             Applications.Add(this);
 #endif
@@ -896,18 +900,12 @@ namespace UIForia {
                     current.flags &= ~UIElementFlags.AncestorEnabled;
                 }
 
-                UIElement.UIElementTypeData typeData = current.GetTypeData();
-
-                // todo -- build tree subsection & add it all at once
-                if (typeData.requiresUpdate) {
-                    updateTree.AddItem(current);
-                }
-
                 elementMap[current.id] = current;
 
                 if (!current.isRegistered) {
-                    current.style.Initialize();
+                    
                     current.flags |= UIElementFlags.Registered;
+                    
                     for (int i = 0; i < m_Systems.Count; i++) {
                         m_Systems[i].OnElementCreated(current);
                     }

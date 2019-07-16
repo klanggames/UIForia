@@ -49,8 +49,6 @@ public class TestTemplateParser_Context {
         compiledTemplate.Create(element, new TemplateScope2(application, linqBindingNode, null));
 
         UITextElement textElement = (UITextElement) element.children[0].children[0];
-
-        
     }
 
     [Template(TemplateType.String, @"
@@ -71,7 +69,7 @@ public class TestTemplateParser_Context {
         };
 
     }
-    
+
     [Template(TemplateType.String, @"
     <UITemplate>    
         <Content>
@@ -92,7 +90,7 @@ public class TestTemplateParser_Context {
         };
 
     }
-    
+
     [Template(TemplateType.String, @"
     <UITemplate>    
         <Content>
@@ -108,25 +106,12 @@ public class TestTemplateParser_Context {
         </Content>
     </UITemplate>
     ")]
-    public class TestSimpleContext_SlotUser : UIElement {}
+    public class TestSimpleContext_SlotUser : UIElement { }
 
     [Test]
     public void CompileContext_SlotUserHasContext() {
-        
         MockApplication application = new MockApplication(typeof(TestSimpleContext_SlotUser));
-
-//        TemplateCompiler compiler = new TemplateCompiler(application);
-//
-//        CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TestSimpleContext_SlotUser));
-//
-//        application.templateData.Build();
-//        compiledTemplate.Compile();
-//
-//        TestSimpleContext_SlotUser element = new TestSimpleContext_SlotUser();
-//        LinqBindingNode linqBindingNode = new LinqBindingNode();
-//        compiledTemplate.Create(element, new TemplateScope2(application, linqBindingNode, null));
         application.Update();
-        
     }
 
 }

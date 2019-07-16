@@ -40,6 +40,8 @@ namespace UIForia.Compilers {
         }
 
         internal UIElement Create(UIElement root, TemplateScope2 scope) {
+            // todo -- get rid of the build call here
+            scope.application.templateData.Build();
             return scope.application.templateData.templateFns[templateId](root, scope);
         }
 

@@ -13,6 +13,7 @@ namespace UIForia {
         internal static string s_InternalNonStreamingPath;
         internal static string s_UserNonStreamingPath;
         internal static string s_UserStreamingPath;
+        public bool usePreCompiledTemplates;
 
         public void OnEnable() {
             loadTemplatesFromStreamingAssets = loadTemplatesFromStreamingAssets || !UnityEngine.Application.isEditor;
