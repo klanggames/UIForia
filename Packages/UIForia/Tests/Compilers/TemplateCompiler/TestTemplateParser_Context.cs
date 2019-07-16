@@ -1,4 +1,3 @@
-using System.Text;
 using NUnit.Framework;
 using Tests.Mocks;
 using UIForia.Attributes;
@@ -6,27 +5,6 @@ using UIForia.Compilers;
 using UIForia.Elements;
 using UIForia.Systems;
 using static Tests.Compilers.TemplateCompiler.TestTemplateUtils;
-
-public class TextBinding : LinqBinding {
-
-    string[] parts;
-    
-    private static readonly StringBuilder builder = new StringBuilder(1024);
-    
-    public override void Execute(UIElement templateRoot, UIElement current, TemplateContext context) {
-    
-        // todo -- don't use the builder, evaluate parts individually and pass all to text info 
-        // or intercept expression output and write to char array w/ offset instead
-        
-//        UITextElement textElement = (UITextElement) current;
-//        
-//        textElement.SetText();
-        
-    }
-
-    public override bool CanBeShared => true;
-
-}
 
 [TestFixture]
 public class TestTemplateParser_Context {
@@ -36,7 +14,7 @@ public class TestTemplateParser_Context {
         public int value;
 
     }
-    
+
     [Template(TemplateType.String, @"
     <UITemplate>    
         <Content>
@@ -65,12 +43,89 @@ public class TestTemplateParser_Context {
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TestSimpleContext));
 
         application.templateData.Build();
-        compiledTemplate.Compile();
-        
+
         TestSimpleContext element = new TestSimpleContext();
         LinqBindingNode linqBindingNode = new LinqBindingNode();
         compiledTemplate.Create(element, new TemplateScope2(application, linqBindingNode, null));
 
+        UITextElement textElement = (UITextElement) element.children[0].children[0];
+
+        
+    }
+
+    [Template(TemplateType.String, @"
+    <UITemplate>    
+        <Content>
+
+          <Div ctx:context='someContext' ctxvar:times2='value * 2'>
+              {$times2}  
+          </Div>
+
+        </Content>
+    </UITemplate>
+    ")]
+    public class TestSimpleContext2 : UIElement {
+
+        public TestTemplateContext someContext = new TestTemplateContext() {
+            value = 1341
+        };
+
+    }
+    
+    [Template(TemplateType.String, @"
+    <UITemplate>    
+        <Content>
+
+          <Div ctx:context='someContext' ctxvar:times2='value * 2'>
+              <DefineSlot:SlotWithContext>
+                {$times2}  
+              </DefineSlot:SlotWithContext>
+          </Div>
+
+        </Content>
+    </UITemplate>
+    ")]
+    public class TestSimpleContext_SlotDefiner : UIElement {
+
+        public TestTemplateContext someContext = new TestTemplateContext() {
+            value = 1341
+        };
+
+    }
+    
+    [Template(TemplateType.String, @"
+    <UITemplate>    
+        <Content>
+
+            <TestSimpleContext_SlotDefiner>
+
+              <Slot:SlotWithContext>
+                    text is: {$times2}  
+              </Slot:SlotWithContext>
+
+            </TestSimpleContext_SlotDefiner>
+
+        </Content>
+    </UITemplate>
+    ")]
+    public class TestSimpleContext_SlotUser : UIElement {}
+
+    [Test]
+    public void CompileContext_SlotUserHasContext() {
+        
+        MockApplication application = new MockApplication(typeof(TestSimpleContext_SlotUser));
+
+//        TemplateCompiler compiler = new TemplateCompiler(application);
+//
+//        CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TestSimpleContext_SlotUser));
+//
+//        application.templateData.Build();
+//        compiledTemplate.Compile();
+//
+//        TestSimpleContext_SlotUser element = new TestSimpleContext_SlotUser();
+//        LinqBindingNode linqBindingNode = new LinqBindingNode();
+//        compiledTemplate.Create(element, new TemplateScope2(application, linqBindingNode, null));
+        application.Update();
         
     }
 

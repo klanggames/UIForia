@@ -1,11 +1,15 @@
-using System.Linq.Expressions;
 
 namespace UIForia.Compilers {
 
-    public struct TemplateContextVariable {
+    public readonly struct TemplateContextVariable {
 
-        public string name;
-        public Expression expression;
+        public readonly string name;
+        public readonly string expression;
+
+        public TemplateContextVariable(string name, string expression) {
+            this.name = name;
+            this.expression = expression;
+        }
 
     }
 

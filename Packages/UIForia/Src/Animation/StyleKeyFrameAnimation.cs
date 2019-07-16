@@ -234,7 +234,7 @@ namespace UIForia.Animation {
 
                     case StylePropertyId.PreferredWidth:
                     case StylePropertyId.MinWidth:
-                    case StylePropertyId.MaxWidth: {
+                    case StylePropertyId.MaxWidth: { 
 
                         float v0 = ResolveWidthMeasurement(target, viewport, prev.value.IsCalculated
                             ? prev.value.Evaluate<UIMeasurement>(null)

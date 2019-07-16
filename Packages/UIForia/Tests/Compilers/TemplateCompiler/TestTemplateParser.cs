@@ -57,11 +57,7 @@ public class TestTemplateParser {
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(CompileTestElement));
 
-        Func<UIElement, TemplateScope2, CompiledTemplate, UIElement> create = compiledTemplate.Compile();
-
-        Debug.Log(PrintCode(compiledTemplate.buildExpression, false));
-
-        UIElement r = create(null, new TemplateScope2(application, new LinqBindingNode(), null), compiledTemplate);
+        UIElement r = compiledTemplate.Create(null, new TemplateScope2(application, new LinqBindingNode(), null));
 
         Assert.IsInstanceOf<CompileTestElement>(r);
         Assert.AreEqual(3, r.children.size);
@@ -89,7 +85,8 @@ public class TestTemplateParser {
         Assert.AreEqual("yep", r.children[2].attributes[1].value);
 
         UIElement element = application.CreateElementFromPool(typeof(CompileTestElement), null, compiledTemplate.childCount);
-        create(element, new TemplateScope2(application, new LinqBindingNode(), null), compiledTemplate);
+        compiledTemplate.Create(element, new TemplateScope2(application, new LinqBindingNode(), null));
+        
     }
 
     [Template(TemplateType.String, @"
@@ -248,7 +245,6 @@ public class TestTemplateParser {
         TemplateCompiler compiler = new TemplateCompiler(application);
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TemplateWithSlotsSimple));
-        compiledTemplate.Compile();
 
         UIElement element = new TemplateWithSlotsSimple();
 
@@ -294,7 +290,6 @@ public class TestTemplateParser {
         TemplateCompiler compiler = new TemplateCompiler(application);
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TestSimpleSlotReplace));
-        compiledTemplate.Compile();
 
         UIElement element = new TestSimpleSlotReplace();
 
@@ -327,7 +322,6 @@ public class TestTemplateParser {
         TemplateCompiler compiler = new TemplateCompiler(application);
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TemplateReplaceInnerSlot));
-        compiledTemplate.Compile();
 
         UIElement element = new TemplateReplaceInnerSlot();
 
@@ -371,7 +365,6 @@ public class TestTemplateParser {
         TemplateCompiler compiler = new TemplateCompiler(application);
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(TemplateReplaceOuterSlot));
-        compiledTemplate.Compile();
 
         UIElement element = new TemplateReplaceOuterSlot();
 
@@ -444,7 +437,6 @@ public class TestTemplateParser {
         TemplateCompiler compiler = new TemplateCompiler(application);
 
         CompiledTemplate compiledTemplate = compiler.GetCompiledTemplate(typeof(CompileAsTemplateFn));
-        compiledTemplate.Compile();
 
         UIElement element = new CompileAsTemplateFn();
 

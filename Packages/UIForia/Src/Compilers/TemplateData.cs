@@ -17,13 +17,21 @@ namespace UIForia.Compilers {
             sharedBindingLambdas.Add(expression);
             return sharedBindingLambdas.Count - 1;
         }
+        
+        public int AddTemplate(LambdaExpression expression) {
+            templateLambdas.Add(expression);
+            return templateLambdas.size - 1;
+        }
+
 
         internal LightList<LambdaExpression> contextProviderLambdas = new LightList<LambdaExpression>();
         internal LightList<LambdaExpression> sharedBindingLambdas = new LightList<LambdaExpression>();
         internal LightList<LambdaExpression> instanceBindingFns = new LightList<LambdaExpression>();
+        internal LightList<LambdaExpression> templateLambdas = new LightList<LambdaExpression>();
 
         internal Func<UIElement, UIElement, TemplateContext>[] contextProviderFns;
-        internal Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>[] sharedBindingFns;
+        internal LightList<Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>> sharedBindingFns;
+        internal LightList<Func<UIElement, TemplateScope2, UIElement>> templateFns;
 
         public static readonly Action<UIElement, UIElement, StructStack<TemplateContextWrapper>> onUpdate = (a, b, c) => b.OnUpdate();
 
@@ -46,8 +54,16 @@ namespace UIForia.Compilers {
                     sharedBindingFns[i] = (Action<UIElement, UIElement, StructStack<TemplateContextWrapper>>) sharedBindingLambdas[i].Compile();
                 }
             }
+
+            templateFns = new LightList<Func<UIElement, TemplateScope2, UIElement>>(templateLambdas.size);
+            
+            for (int i = 0; i < templateLambdas.size; i++) {
+                templateFns[i] = (Func<UIElement, TemplateScope2, UIElement>) templateLambdas[i].Compile();
+            }
+            
         }
 
+      
     }
 
 }

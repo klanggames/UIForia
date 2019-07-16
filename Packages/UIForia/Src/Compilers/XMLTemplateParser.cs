@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using UIForia.Elements;
@@ -221,13 +222,13 @@ namespace UIForia.Compilers {
                 switch (node.NodeType) {
                     case XmlNodeType.Text: {
                         XText textNode = (XText) node;
-                        
+
                         if (string.IsNullOrWhiteSpace(textNode.Value)) {
                             continue;
                         }
 
                         string textContent = textNode.Value.Trim(); // maybe don't trim & let text style handle it
-                        
+
                         if (parent.children.Count == 0) {
                             TemplateNode templateNode = TemplateNode.Get();
                             templateNode.parent = parent;
@@ -289,7 +290,7 @@ namespace UIForia.Compilers {
                 TemplateNode.Release(ref parent.children.array[0]);
                 parent.children.Clear();
             }
-            
+
             if (parent.parent != null && parent.processedType.requiresTemplateExpansion && parent.children.Count > 0) {
                 TemplateNode childrenSlotNode = TemplateNode.Get();
                 for (int i = 0; i < parent.children.size; i++) {
@@ -315,32 +316,125 @@ namespace UIForia.Compilers {
             }
         }
 
-        private static LightList<string> ProcessTextContent(string input) {
-            string[] expressionParts = s_TextElementParser.Parse(input);
-            
-            LightList<string> output = LightList<string>.GetMinSize(expressionParts.Length);
-            
-            for (int i = 0; i < expressionParts.Length; i++) {
-                if (expressionParts[i] == "''") {
-                    continue;
-                }
-                output.Add(expressionParts[i]);
+        private static bool Escape(string input, ref int ptr, out char result) {
+            // xml parser might already do this for us
+            if (StringCompare(input, ref ptr, "amp;", '&', out result)) return true;
+            if (StringCompare(input, ref ptr, "lt;", '<', out result)) return true;
+            if (StringCompare(input, ref ptr, "amp;", '>', out result)) return true;
+            if (StringCompare(input, ref ptr, "amp;", '"', out result)) return true;
+            if (StringCompare(input, ref ptr, "amp;", '\'', out result)) return true;
+            if (StringCompare(input, ref ptr, "obrc;", '{', out result)) return true;
+            if (StringCompare(input, ref ptr, "cbrc;", '}', out result)) return true;
+            return false;
+        }
+
+        private static bool StringCompare(string input, ref int ptr, string target, char match, out char result) {
+            result = '\0';
+
+            if (ptr + target.Length - 1 >= input.Length) {
+                return false;
             }
 
+            for (int i = 0; i < target.Length; i++) {
+                if (target[i] != input[ptr + i]) {
+                    return false;
+                }
+            }
+
+            ptr += target.Length;
+            result = match;
+            return true;
+        }
+
+
+        public static void ProcessTextExpressions(string input, LightList<string> outputList) {
+            //input = input.Trim(); // todo -- let style handle this 
+            int ptr = 0;
+            int level = 0;
+
+            StringBuilder builder = TextUtil.StringBuilder;
+            builder.Clear();
+            
+            
+            while (ptr < input.Length) {
+                char current = input[ptr++];
+                if (current == '&') {
+                    // todo -- escape probably needs to go the other way round
+                    if (Escape(input, ref ptr, out char result)) {
+                        builder.Append(result);
+                        continue;
+                    }
+                }
+
+                if (current == '{') {
+                    if (level == 0) {
+                        if (builder.Length > 0) {
+                            builder.Append("'");
+                            outputList.Add("'" + builder.ToString());
+                            builder.Clear();
+                        }
+                        level++;
+                        continue;
+                    }
+                    level++;
+                }
+
+                if (current == '}') {
+                    level--;
+                    if (level == 0) {
+                        if (builder.Length > 0) {
+                            outputList.Add(builder.ToString());
+                            builder.Clear();
+                        }
+
+                        continue;
+                    }
+                }
+
+                builder.Append(current);
+            }
+
+            if (level != 0) {
+                throw new Exception($"Error processing {input} into expressions. Too many unmatched braces");
+            }
+
+            if (builder.Length > 0) {
+                outputList.Add("'" + builder + "'");
+            }
+
+            builder.Clear();
+        }
+
+
+        private static LightList<string> ProcessTextContent(string input) {
+            LightList<string> output = LightList<string>.Get();
+
+            ProcessTextExpressions(input, output);
+            
+            for (int i = 0; i < output.Count; i++) {
+                if (output[i] == "''") {
+                    output.RemoveAt(i--);
+                }
+            }
+            
             return output;
         }
 
         private static void AppendTextContent(LightList<string> target, string input) {
-            string[] expressionParts = s_TextElementParser.Parse(input);
-            target.EnsureAdditionalCapacity(expressionParts.Length);
             
-            for (int i = 0; i < expressionParts.Length; i++) {
-                if (expressionParts[i] == "''") {
-                    continue;
-                }
-                target.Add(expressionParts[i]);
-            }
+            LightList<string> output = LightList<string>.Get();
 
+            ProcessTextExpressions(input, output);
+            
+            for (int i = 0; i < output.Count; i++) {
+                if (output[i] == "''") {
+                    output.RemoveAt(i--);
+                }
+            }
+            
+            target.AddRange(output);
+            LightList<string>.Release(ref output);
+            
         }
 
         private UsingDeclaration ParseUsing(XElement element) {

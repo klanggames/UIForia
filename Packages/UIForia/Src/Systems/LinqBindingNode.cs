@@ -1,8 +1,8 @@
-using UIForia.Bindings;
 using UIForia.Compilers;
 using UIForia.Elements;
 using UIForia.Util;
 using UnityEngine;
+using LinqBinding = System.Action<UIForia.Elements.UIElement, UIForia.Elements.UIElement, UIForia.Util.StructStack<UIForia.Compilers.TemplateContextWrapper>>;
 
 namespace UIForia.Systems {
 
@@ -10,7 +10,6 @@ namespace UIForia.Systems {
 
         internal UIElement root;
         internal UIElement element;
-        internal TemplateContext ctx;
         internal int iteratorIndex;
         internal LightList<LinqBindingNode> children;
         internal LightList<LinqBinding>.ListSpan bindings;
@@ -37,7 +36,7 @@ namespace UIForia.Systems {
         public void Update(StructStack<TemplateContextWrapper> contextStack) {
             system.currentlyActive = this;
 
-            enabledBinding?.Execute(root, element, ctx);
+            enabledBinding?.Invoke(root, element, contextStack);
 
             if (!element.isEnabled) {
                 return;
@@ -49,7 +48,7 @@ namespace UIForia.Systems {
             int bindingsEnd = bindings.end;
 
             for (int i = bindingStart; i < bindingsEnd; i++) {
-                bindingArray[i].Execute(root, element, ctx);
+                bindingArray[i].Invoke(root, element, contextStack);
             }
 
             if (!element.isEnabled) {
@@ -117,11 +116,11 @@ namespace UIForia.Systems {
             }
         }
 
-        public static LinqBindingNode Get(TemplateScope2 scope, UIElement element, UIElement rootElement) {
+        public static LinqBindingNode Get(Application application, UIElement element, UIElement rootElement) {
             LinqBindingNode node = new LinqBindingNode();
             node.root = rootElement;
             node.element = element;
-            node.system = scope.application.LinqBindingSystem;
+            node.system = application.LinqBindingSystem;
             node.phase = node.system.previousPhase;
             node.iteratorIndex = -1;
             node.bindings = default;

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using UIForia.Compilers;
 using UIForia.Elements;
 using UIForia.Layout;
+using UIForia.Systems;
 using UIForia.Templates;
 using UIForia.Util;
 using UnityEngine;
@@ -111,17 +113,23 @@ public class UIView {
         elementCount = 1;
         sizeChanged = true;
         rootElement.children.Clear();
+        
         if (m_ElementType == null) {
             return;
         }
+
+
+        CompiledTemplate compiledTemplate = Application.templateCompiler.GetCompiledTemplate(m_ElementType);
+        LinqBindingNode bindingNode = new LinqBindingNode();
+        UIElement element = compiledTemplate.Create(null, new TemplateScope2(Application, bindingNode, null));
         
         UIElement child = null;
-        if (m_Template != null) {
-            child = Application.templateParser.ParseTemplateFromString(m_ElementType, m_Template).Create();
-        }
-        else {
-            child = Application.templateParser.GetParsedTemplate(m_ElementType).Create();
-        }
+//        if (m_Template != null) {
+//            child = Application.templateParser.ParseTemplateFromString(m_ElementType, m_Template).Create();
+//        }
+//        else {
+//            child = Application.templateParser.GetParsedTemplate(m_ElementType).Create();
+//        }
 
         if (child != null) {
             this.rootElement.AddChild(child);

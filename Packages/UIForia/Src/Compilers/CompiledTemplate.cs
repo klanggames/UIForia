@@ -1,34 +1,20 @@
 using System;
-using System.Linq.Expressions;
 using UIForia.Elements;
 using UIForia.Exceptions;
 using UIForia.Parsing.Expression;
-using UIForia.Systems;
 using UIForia.Util;
 
 namespace UIForia.Compilers {
 
     public class CompiledTemplate {
 
-        internal Expression<Func<UIElement, TemplateScope2, CompiledTemplate, UIElement>> buildExpression;
-        internal Func<UIElement, TemplateScope2, CompiledTemplate, UIElement> createFn;
-        
-        // todo -- these can be global and just live in large arrays
-        internal LightList<LinqBinding> sharedBindings = new LightList<LinqBinding>();
-        internal LightList<LinqBinding> instanceBindings = new LightList<LinqBinding>();
-        internal LightList<Func<UIElement, UIElement, TemplateContext>> contextProviders;
-        
         internal ProcessedType elementType;
         internal AttributeDefinition2[] attributes;
         public string fileName;
         public int templateId;
         public StructList<SlotDefinition> slotDefinitions;
         public int childCount;
-
-        internal Func<UIElement, TemplateScope2, CompiledTemplate, UIElement> Compile() {
-            return buildExpression.Compile();
-        }
-
+        
         public bool TryGetSlotData(string slotName, out SlotDefinition slotDefinition) {
             if (slotDefinitions == null) {
                 slotDefinition = default;
@@ -54,13 +40,7 @@ namespace UIForia.Compilers {
         }
 
         internal UIElement Create(UIElement root, TemplateScope2 scope) {
-            if (createFn == null) {
-                createFn = buildExpression.Compile();
-            }
-
-            root.children = LightList<UIElement>.GetMinSize(childCount);
-            root.children.size = childCount;
-            return createFn(root, scope, null);
+            return scope.application.templateData.templateFns[templateId](root, scope);
         }
 
         public int GetSlotId(string slotName) {

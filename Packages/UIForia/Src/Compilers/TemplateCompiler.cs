@@ -4,12 +4,14 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using Mono.Linq.Expressions;
+using UIForia.Compilers.ExpressionResolvers;
 using UIForia.Elements;
 using UIForia.Exceptions;
 using UIForia.Parsing.Expression;
 using UIForia.Systems;
 using UIForia.Util;
 using UnityEngine;
+using LinqBinding = System.Action<UIForia.Elements.UIElement, UIForia.Elements.UIElement, UIForia.Util.StructStack<UIForia.Compilers.TemplateContextWrapper>>;
 
 namespace UIForia.Compilers {
 
@@ -19,11 +21,11 @@ namespace UIForia.Compilers {
         private int varId;
         private readonly LinqCompiler linqCompiler;
 
-        public LinqStyleCompiler styleCompiler;
-        public LinqPropertyCompiler propertyCompiler;
-        private LightStack<Type> compilationStack;
-        private Dictionary<Type, CompiledTemplate> templateMap;
-        private XMLTemplateParser xmlTemplateParser;
+        private readonly LinqStyleCompiler styleCompiler;
+        private readonly LinqPropertyCompiler propertyCompiler;
+        private readonly LightStack<Type> compilationStack;
+        private readonly Dictionary<Type, CompiledTemplate> templateMap;
+        private readonly XMLTemplateParser xmlTemplateParser;
 
         private static readonly MethodInfo s_CreateFromPool = typeof(Application).GetMethod("CreateElementFromPool");
         private static readonly MethodInfo s_BindingNodePool_Get = typeof(LinqBindingNode).GetMethod("Get", BindingFlags.Static | BindingFlags.Public);
@@ -51,14 +53,22 @@ namespace UIForia.Compilers {
         private static readonly MethodInfo s_Application_CreateSlot = typeof(Application).GetMethod(nameof(Application.CreateSlot), BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo s_Application_TemplateData = typeof(Application).GetField(nameof(Application.templateData), BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo s_TemplateData_ContextProviderFns = typeof(TemplateData).GetField(nameof(TemplateData.contextProviderFns), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        private static readonly FieldInfo s_TemplateData_SharedBindingList = typeof(TemplateData).GetField(nameof(TemplateData.sharedBindingFns), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
 
         private static readonly MethodInfo s_BindingNode_AddChild = typeof(LinqBindingNode).GetMethod(nameof(LinqBindingNode.AddChild), BindingFlags.Public | BindingFlags.Instance);
         private static readonly MethodInfo s_BindingNode_SetContextProvider = typeof(LinqBindingNode).GetMethod(nameof(LinqBindingNode.SetContextProvider), BindingFlags.Public | BindingFlags.Instance);
+        private static readonly FieldInfo s_BindingNode_BindingList = typeof(LinqBindingNode).GetField(nameof(LinqBindingNode.bindings), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
+        private static readonly ConstructorInfo s_LightList_LinqBinding_SpanCtor = typeof(LightList<LinqBinding>.ListSpan).GetConstructor(new[] {typeof(LightList<LinqBinding>), typeof(int), typeof(int)});
+        private static readonly MethodInfo s_LightList_LinqBinding_GetMinSize = typeof(LightList<LinqBinding>).GetMethod(nameof(LightList<LinqBinding>.GetMinSize));
         private static readonly ConstructorInfo s_SlotUsage_Ctor = typeof(SlotUsage).GetConstructor(new[] {typeof(string), typeof(int), typeof(LexicalScope)});
 
         private static readonly FieldInfo s_LexicalScope_root = typeof(LexicalScope).GetField(nameof(LexicalScope.root), BindingFlags.Instance | BindingFlags.Public);
         private static readonly FieldInfo s_LexicalScope_data = typeof(LexicalScope).GetField(nameof(LexicalScope.data), BindingFlags.Instance | BindingFlags.Public);
+
+        public const string k_ContextStackVarName = "__contextStack";
+        public const string k_RootElementVarName = "__root";
+        public const string k_CurrentElementVarName = "__element";
 
         public TemplateCompiler(Application application) {
             this.application = application;
@@ -67,6 +77,12 @@ namespace UIForia.Compilers {
             this.templateMap = new Dictionary<Type, CompiledTemplate>();
             this.compilationStack = new LightStack<Type>();
             this.xmlTemplateParser = new XMLTemplateParser(application);
+            
+//            linqCompiler.PushAliasResolver("$siblingIndex", new AliasResolver());
+//            linqCompiler.PushAliasResolver("$parent", new AliasResolver());
+//            linqCompiler.PushAliasResolver("$root", new AliasResolver());
+//            linqCompiler.PushAliasResolver("$element", new AliasResolver());
+            
         }
 
         private void VisitChildren(TemplateNode node, CompilationContext ctx, CompiledTemplate retn) {
@@ -181,7 +197,7 @@ namespace UIForia.Compilers {
 
                 ctx.AddStatement(Expression.Assign(ctx.rootParam, createRootExpression));
 
-                ProcessAttributes(ast.root.attributes, ctx, out bool hasContextProvider);
+                ProcessBindings(ast.root, ctx, false);
 
                 BlockExpression createUnscopedBlock = ctx.PopBlock();
 
@@ -192,7 +208,8 @@ namespace UIForia.Compilers {
 
             ctx.AddStatement(ctx.rootParam); // this is the return value
 
-            retn.buildExpression = Expression.Lambda<Func<UIElement, TemplateScope2, CompiledTemplate, UIElement>>(ctx.Finalize(typeof(UIElement)), rootParam, scopeParam, templateParam);
+            retn.templateId = application.templateData.AddTemplate(Expression.Lambda(ctx.Finalize(typeof(UIElement)), rootParam, scopeParam, templateParam));
+            
             retn.elementType = ast.root.processedType;
             retn.attributes = ast.root.attributes.ToArray();
 
@@ -201,9 +218,7 @@ namespace UIForia.Compilers {
             //todo  release context
 
             application.templateCache.Add(retn);
-
-            LogCode(retn.buildExpression);
-
+            
             return retn;
         }
 
@@ -325,9 +340,7 @@ namespace UIForia.Compilers {
             }
 
             ParameterExpression nodeExpr = ctx.ElementExpr;
-
-            bool hasBindings = false;
-
+            
             // todo process attributes etc
 
             template.AddSlotData(slotData);
@@ -348,10 +361,7 @@ namespace UIForia.Compilers {
                     )
                 )
             );
-
-            if (hasBindings) {
-                ctx.bindingNodeStack.Pop();
-            }
+            
 
             return nodeExpr;
         }
@@ -382,15 +392,13 @@ namespace UIForia.Compilers {
 
             bool hasTextBindings = HasTextBinding(templateNode);
 
-            bool hasContextProvider = HasContextProvider(templateNode);
-
             bool requiresBindingNode = hasTextBindings || RequiresBindingNode(templateNode.attributes, ctx);
 
             if (requiresBindingNode) {
                 ctx.PushBinding();
                 ctx.AddStatement(Expression.Assign(ctx.BindingNodeExpr,
                         Expression.Call(null, s_BindingNodePool_Get,
-                            ctx.templateScope,
+                            ctx.applicationExpr,
                             ctx.rootParam,
                             ctx.ElementExpr
                         )
@@ -398,7 +406,7 @@ namespace UIForia.Compilers {
                 );
             }
 
-            if (processedType.requiresTemplateExpansion) { }
+            bool hasContextProvider = UpdateContextTree(templateNode, ctx, out int aliasPopCount);
 
             if (processedType.requiresTemplateExpansion) {
                 CompiledTemplate compiled = GetCompiledTemplate(processedType);
@@ -407,9 +415,9 @@ namespace UIForia.Compilers {
                 Expression bindingNode = Expression.Default(typeof(LinqBindingNode));
 
                 // merge bindings, outer ones win, take the base bindings and replace duplicates with outer ones
-                StructList<AttributeDefinition2> attributes = MergeAttributes(compiled.attributes, templateNode.attributes);
+                MergeAttributes(templateNode, compiled.attributes);
 
-                ProcessAttributes(attributes, ctx, out hasContextProvider);
+                ProcessBindings(templateNode, ctx, hasTextBindings);
 
                 Expression templateScopeCtor;
 
@@ -467,6 +475,10 @@ namespace UIForia.Compilers {
                 ctx.contextProviderStack.Pop();
             }
 
+            for (int i = 0; i < aliasPopCount; i++) {
+                linqCompiler.PopAliasResolver();
+            }
+
             if (!hasTextBindings && templateNode.textContent != null) {
                 ctx.AddStatement(Expression.Assign(
                     Expression.MakeMemberAccess(
@@ -494,13 +506,11 @@ namespace UIForia.Compilers {
         }
 
         private void ProcessBindings(TemplateNode templateNode, CompilationContext ctx, bool hasTextBindings) {
-            StructList<BindingDefinition> bindings = new StructList<BindingDefinition>();
+            StructList<BindingDefinition> bindings = StructList<BindingDefinition>.Get();
 
             BindingDefinition? enabledBinding = default;
 
             if (templateNode.attributes != null && templateNode.attributes.size > 0) {
-                templateNode.attributes.Sort((a, b) => a.type - b.type);
-
                 AttributeDefinition2[] attributeDefinitions = templateNode.attributes.array;
                 int attrCount = templateNode.attributes.size;
 
@@ -558,6 +568,7 @@ namespace UIForia.Compilers {
             }
 
             if (requiresOwnList) {
+                // todo -- this, but I think event subscriptions are now the only bindings requiring their own data and they probably work differently (ie not a real binding)
                 // bindingNode_1.bindings = new ListSpan(LightList<LinqBindingNode>.GetMinSize(4), 0, 4);
                 // bindingNode_1.bindings.array[0] = templateData.sharedBindings[252];
                 // bindingNode_1.bindings.array[1] = templateData.sharedBindings[253];
@@ -566,22 +577,29 @@ namespace UIForia.Compilers {
                 ctx.AddStatement(
                     Expression.Assign(
                         Expression.Field(ctx.BindingNodeExpr, s_BindingNode_BindingList),
-                        Expression.Call(null, s_LightList_LinqBinding_GetMinSize, Expression.Constant(bindings.size))
+                        Expression.New(s_LightList_LinqBinding_SpanCtor,
+                            Expression.Call(null, s_LightList_LinqBinding_GetMinSize, Expression.Constant(bindings.size)),
+                            Expression.Constant(0),
+                            Expression.Constant(bindings.size)
+                        )
                     )
                 );
             }
             else {
-                // bindingNode_1.bindings = new ListSpan(templateData.sharedBindings, 242, 246);
                 ctx.AddStatement(
                     Expression.Assign(
                         Expression.Field(ctx.BindingNodeExpr, s_BindingNode_BindingList),
-                        Expression.New(s_LightList_SpanCtor, 
-                                Expression.Field(Expression.Field(ctx.applicationExpr, s_Application_TemplateData), s_TemplateData_SharedBindingFns)
-                                
-                            null, s_LightList_LinqBinding_GetMinSize, Expression.Constant(bindings.size))
+                        Expression.New(s_LightList_LinqBinding_SpanCtor,
+                            Expression.Field(Expression.Field(ctx.applicationExpr, s_Application_TemplateData), s_TemplateData_SharedBindingList),
+                            Expression.Constant(0),
+                            Expression.Constant(bindings.size)
+                        )
                     )
                 );
+                // bindingNode_1.bindings = new ListSpan(templateData.sharedBindings, 242, 246);
             }
+
+            bindings.Release();
         }
 
         private static bool HasTextBinding(TemplateNode templateNode) {
@@ -591,20 +609,6 @@ namespace UIForia.Compilers {
 
             for (int i = 0; i < templateNode.textContent.size; i++) {
                 if (templateNode.textContent.array[i][0] == '{' && templateNode.textContent.array[i][templateNode.textContent.array[i].Length - 1] == '}') {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool HasContextProvider(TemplateNode templateNode) {
-            if (templateNode.attributes == null) {
-                return false;
-            }
-
-            for (int i = 0; i < templateNode.attributes.size; i++) {
-                if (templateNode.attributes.array[i].type == AttributeType.Context) {
                     return true;
                 }
             }
@@ -671,7 +675,7 @@ namespace UIForia.Compilers {
             };
         }
 
-        private bool RequiresBindingNode(StructList<AttributeDefinition2> attributes, in CompilationContext ctx) {
+        private static bool RequiresBindingNode(StructList<AttributeDefinition2> attributes, in CompilationContext ctx) {
             if (ctx.elementType.requiresUpdateFn) {
                 return true;
             }
@@ -704,53 +708,91 @@ namespace UIForia.Compilers {
             return false;
         }
 
-        private void ProcessAttributes(StructList<AttributeDefinition2> attributes, in CompilationContext ctx, out bool hasContextProvider) { }
 
-        private void EmitContexts(AttributeDefinition2[] attributeDefinitions, CompilationContext ctx, int start, int end, out bool hasContextProvider) {
-            hasContextProvider = end - start == 1;
-            // assume only 1 for now
-            if (end - start != 1) {
-                throw new Exception("We only support 1 context currently");
+        private bool UpdateContextTree(TemplateNode templateNode, CompilationContext ctx, out int aliasCount) {
+            int contextIdx = -1;
+            aliasCount = 0;
+
+            StructList<TemplateContextVariable> contextVars = StructList<TemplateContextVariable>.Get();
+
+            for (int i = 0; i < templateNode.attributes.size; i++) {
+                if (templateNode.attributes[i].type == AttributeType.Context) {
+                    if (contextIdx != -1) {
+                        throw new Exception("We only support 1 context currently");
+                    }
+
+                    contextIdx = i;
+                }
+                else if (templateNode.attributes[i].type == AttributeType.ContextVariable) {
+                    contextVars.Add(new TemplateContextVariable(
+                        templateNode.attributes.array[i].key,
+                        templateNode.attributes.array[i].value
+                    ));
+                }
+                else if (templateNode.attributes[i].type == AttributeType.Alias) {
+                    // todo 
+                }
             }
 
-            AttributeDefinition2 attr = attributeDefinitions[start];
+            if (contextIdx != -1) {
+                AttributeDefinition2 attr = templateNode.attributes.array[contextIdx];
 
-            ctx.contextProviderStack = ctx.contextProviderStack ?? new LightStack<TemplateContextDefinition>();
+                ctx.contextProviderStack = ctx.contextProviderStack ?? new LightStack<TemplateContextDefinition>();
 
-            // currently don't support aliases or other refs in this expression type
-            LambdaExpression expression = CompileContextExpression(ctx.rootType.rawType, attr.value, out Type contextType);
+                // currently don't support aliases or other refs in this expression type
+                LambdaExpression expression = CompileContextExpression(ctx.rootType.rawType, attr.value, out Type contextType);
 
-            int expressionId = application.templateData.AddContextProviderLambda(expression);
+                int expressionId = application.templateData.AddContextProviderLambda(expression);
+                int contextId = TemplateContextDefinition.IdGenerator++;
 
-            ctx.contextProviderStack.Push(new TemplateContextDefinition() {
-                name = attr.key,
-                expressionId = expressionId,
-                type = expression.Type,
-                id = TemplateContextDefinition.IdGenerator++,
-            });
+                if (contextVars.size == 0) {
+                    contextVars.Release();
+                }
 
-            Expression templateData = Expression.Field(ctx.applicationExpr, s_Application_TemplateData);
-            Expression array = Expression.Field(templateData, s_TemplateData_ContextProviderFns);
-            Expression arrayLookup = Expression.ArrayAccess(array, Expression.Constant(expressionId));
-            Expression createContext = Expression.Invoke(arrayLookup, ctx.rootParam, ctx.ElementExpr);
+                ctx.contextProviderStack.Push(new TemplateContextDefinition() {
+                    name = attr.key,
+                    expressionId = expressionId,
+                    type = expression.Type,
+                    id = contextId,
+                    variables = contextVars
+                });
 
-            // bindingNode.SetContextProvider(scope.application.templateData[24](root, element), id);
-            ctx.AddStatement(
-                Expression.Call(ctx.BindingNodeExpr, s_BindingNode_SetContextProvider, createContext, Expression.Constant(ctx.contextProviderStack.PeekUnchecked().id))
-            );
+                Expression templateData = Expression.Field(ctx.applicationExpr, s_Application_TemplateData);
+                Expression array = Expression.Field(templateData, s_TemplateData_ContextProviderFns);
+                Expression arrayLookup = Expression.ArrayAccess(array, Expression.Constant(expressionId));
+                Expression createContext = Expression.Invoke(arrayLookup, ctx.rootParam, ctx.ElementExpr);
 
-            linqCompiler.PushAliasResolver(attr.key, new ContextAliasResolver(contextType, ctx.contextProviderStack.PeekUnchecked().id));
-            // todo -- gotta pop this, reset should not clear resolvers
+                // bindingNode.SetContextProvider(scope.application.templateData[24](root, element), id);
+                ctx.AddStatement(
+                    Expression.Call(ctx.BindingNodeExpr, s_BindingNode_SetContextProvider, createContext, Expression.Constant(ctx.contextProviderStack.PeekUnchecked().id))
+                );
+
+                linqCompiler.PushAliasResolver(attr.key, new ContextAliasResolver(contextType, attr.key, contextId));
+
+                for (int i = 0; i < contextVars.size; i++) {
+                    linqCompiler.PushAliasResolver("$" + contextVars[i].name, new ContextVariableResolver(contextType, attr.key, contextId, contextVars.array[i]));
+                }
+
+                aliasCount = contextVars.size + 1;
+            }
+
+            if (contextVars.size > 0 && contextIdx == -1) {
+                throw new Exception("You cannot use context variables without defining a context. If you mean to alias a context or context variable use an alias attribute specifier instead.");
+            }
+
+            return contextIdx != -1;
         }
-
 
         private LambdaExpression CompileContextExpression(Type rootType, string input, out Type contextType) {
             linqCompiler.SetSignature<TemplateContext>(
-                new Parameter(typeof(UIElement), "__root", ParameterFlags.NeverNull),
-                new Parameter(typeof(UIElement), "__element", ParameterFlags.NeverNull)
+                new Parameter(typeof(UIElement), k_RootElementVarName, ParameterFlags.NeverNull),
+                new Parameter(typeof(UIElement), k_CurrentElementVarName, ParameterFlags.NeverNull)
             );
 
-            ParameterExpression rootExpr = linqCompiler.AddVariable(new Parameter(rootType, "_castRoot", ParameterFlags.NeverNull), Expression.Convert(linqCompiler.GetParameter("root"), rootType));
+            ParameterExpression rootExpr = linqCompiler.AddVariable(
+                new Parameter(rootType, "_castRoot", ParameterFlags.NeverNull),
+                Expression.Convert(linqCompiler.GetParameter(k_RootElementVarName), rootType)
+            );
 
             linqCompiler.SetImplicitContext(rootExpr, ParameterFlags.NeverNull);
 
@@ -796,7 +838,7 @@ namespace UIForia.Compilers {
             // todo -- force string cast
             // todo -- probably some deconstruction we can do here to reduce allocations from concatenation
             // then compare character per character with current value and only call set if changed.
-            linqCompiler.Statement("__element.SetAttribute('" + attr.key + "', " + attr.value + ")");
+            linqCompiler.Statement(k_CurrentElementVarName + ".SetAttribute('" + attr.key + "', " + attr.value + ")");
 
             LambdaExpression retn = linqCompiler.BuildLambda();
 
@@ -806,9 +848,9 @@ namespace UIForia.Compilers {
 
         private void SetCompilerSignature() {
             linqCompiler.SetSignature(
-                new Parameter(typeof(UIElement), "__root", ParameterFlags.NeverNull),
-                new Parameter(typeof(UIElement), "__element", ParameterFlags.NeverNull),
-                new Parameter(typeof(StructStack<TemplateContextWrapper>), "__contextStack", ParameterFlags.NeverNull)
+                new Parameter(typeof(UIElement), k_RootElementVarName, ParameterFlags.NeverNull),
+                new Parameter(typeof(UIElement), k_CurrentElementVarName, ParameterFlags.NeverNull),
+                new Parameter(typeof(StructStack<TemplateContextWrapper>), k_ContextStackVarName, ParameterFlags.NeverNull)
             );
         }
 
@@ -820,7 +862,6 @@ namespace UIForia.Compilers {
             if (cnt == 0) return;
 
             int attrBindingCount = 0;
-
 
             for (int i = startIdx; i < endIndex; i++) {
                 ref AttributeDefinition2 attr = ref attributeDefinitions[i];
@@ -887,8 +928,8 @@ namespace UIForia.Compilers {
             );
         }
 
-        private static StructList<AttributeDefinition2> MergeAttributes(AttributeDefinition2[] inner, StructList<AttributeDefinition2> outer) {
-            StructList<AttributeDefinition2> mergedAttributes = StructList<AttributeDefinition2>.GetMinSize(inner.Length + outer.size);
+        private static void MergeAttributes(TemplateNode templateNode, StructList<AttributeDefinition2> outer) {
+            StructList<AttributeDefinition2> mergedAttributes = StructList<AttributeDefinition2>.GetMinSize(templateNode.attributes.size + outer.size);
 
             // match on type & name, might have to track source also in case of binding context
 
@@ -897,6 +938,7 @@ namespace UIForia.Compilers {
 
             int outerCount = outer.size;
             AttributeDefinition2[] mergedArray = mergedAttributes.array;
+            AttributeDefinition2[] inner = templateNode.attributes.array;
 
             for (int i = 0; i < inner.Length; i++) {
                 // for each inner attribute
@@ -920,7 +962,8 @@ namespace UIForia.Compilers {
                 }
             }
 
-            return mergedAttributes;
+            templateNode.attributes.Release();
+            templateNode.attributes = mergedAttributes;
         }
 
 

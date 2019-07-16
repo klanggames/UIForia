@@ -59,6 +59,7 @@ namespace UIForia {
         public event Action<UIView> onViewRemoved;
 
         internal TemplateData templateData;
+        internal TemplateCompiler templateCompiler;
 
         protected internal readonly List<UIView> m_Views;
 
@@ -125,6 +126,7 @@ namespace UIForia {
             s_ApplicationList.Add(this);
             
             this.templateData = new TemplateData(); // todo -- load this from elsewhere in the pre-generated case
+            this.templateCompiler = new TemplateCompiler(this);
             
             this.elementPool = new ElementPool();
             this.m_Systems = new List<ISystem>();

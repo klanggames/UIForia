@@ -291,25 +291,32 @@ namespace UIForia.Compilers {
             return Visit(targetType, ExpressionParser.Parse(input));
         }
 
-        public ParameterExpression AddVariable(Parameter parameter,  string value) {
+        public ParameterExpression AddVariable(Parameter parameter, string value) {
             ParameterExpression variable = currentBlock.AddUserVariable(parameter);
             AddStatement(Expression.Assign(variable, Visit(parameter.type, ExpressionParser.Parse(value))));
-            if((parameter.flags & ParameterFlags.NeverNull) != 0) {
+            if ((parameter.flags & ParameterFlags.NeverNull) != 0) {
                 wasNullChecked.Add(parameter.expression); // todo -- hack :(
             }
+
             return variable;
         }
-        
-        public ParameterExpression AddVariable(Parameter parameter,  Expression value) {
+
+        public ParameterExpression AddVariable(Parameter parameter, Expression value) {
             ParameterExpression variable = currentBlock.AddUserVariable(parameter);
-            if((parameter.flags & ParameterFlags.NeverNull) != 0) {
+            if ((parameter.flags & ParameterFlags.NeverNull) != 0) {
                 wasNullChecked.Add(parameter.expression); // todo -- hack :(
             }
+
             AddStatement(Expression.Assign(variable, value));
             return variable;
         }
 
         public void SetImplicitContext(ParameterExpression parameterExpression, ParameterFlags flags = 0) {
+            if (parameterExpression == null) {
+                implicitContext = null;
+                return;
+            }
+            
             implicitContext = new Parameter() {
                 expression = parameterExpression,
                 flags = flags,
@@ -1646,9 +1653,9 @@ namespace UIForia.Compilers {
         }
 
         private bool RequiresNullCheck(Expression head) {
-            return shouldNullCheck && 
-                   head.Type.IsClass && 
-                   !wasNullChecked.Contains(head) && 
+            return shouldNullCheck &&
+                   head.Type.IsClass &&
+                   !wasNullChecked.Contains(head) &&
                    (!ResolveParameter(head, out Parameter parameter) || (parameter.flags & ParameterFlags.NeverNull) == 0);
         }
 
@@ -2225,8 +2232,8 @@ namespace UIForia.Compilers {
         }
 
         private Expression VisitIdentifierNode(IdentifierNode identifierNode) {
-            if (identifierNode.IsAlias) {
-                throw new NotImplementedException("Aliases aren't support yet");
+            if (identifierNode.name[0] == '$') {
+                return ResolveAlias(identifierNode.name);
             }
 
             if (implicitContext != null) {
@@ -2455,6 +2462,24 @@ namespace UIForia.Compilers {
             }
 
             throw new CompileException($"Unable to parse numeric value from {literalNode.rawValue} target type was {targetType}");
+        }
+
+        public bool HasVariable(string variableName, out ParameterExpression variable) {
+            variable = currentBlock.ResolveVariable(variableName);
+            return variable != null;
+        }
+
+        public ParameterExpression AssignVariable(string variableName, string expression) {
+            ASTNode ast = ExpressionParser.Parse(expression);
+            Expression value = VisitAndGetType(null, ast, out Type expressionType);
+            ParameterExpression variable = Expression.Parameter(expressionType, variableName);
+            currentBlock.AddUserVariable(new Parameter() {
+                type = expressionType,
+                name = variableName,
+                expression = variable
+            });
+            AddStatement(Expression.Assign(variable, value));
+            return variable;
         }
 
     }
