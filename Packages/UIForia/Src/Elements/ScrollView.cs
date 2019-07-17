@@ -24,7 +24,7 @@ namespace UIForia.Elements {
 
         // todo -- without layout system integration this is an overlay scroll bar only
 
-        public override void OnReady() {
+        public override void OnCreate() {
             targetElement = this; //FindFirstByType<UIChildrenElement>().GetChild(0);
             verticalHandle = FindById("scroll-handle-vertical");
             verticalTrack = FindById("scroll-track-vertical");

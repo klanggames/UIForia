@@ -39,7 +39,6 @@ namespace UIForia.Templates {
         public static readonly ExpressionAliasResolver s_RouteResolver = new RouteResolver("route");
         
         // todo -- I don't think these are used
-        public static readonly ExpressionAliasResolver s_RouteParameterResolver = new RouteParameterResolver("$routeParams");
         public static readonly ExpressionAliasResolver s_ContentSizeResolver = new ContentSizeResolver();
         public static readonly ExpressionAliasResolver s_UrlResolver = new UrlResolver("$url");
         public static readonly ExpressionAliasResolver s_RgbResolver = new ColorResolver("$rgb");
@@ -72,7 +71,6 @@ namespace UIForia.Templates {
             compiler.AddAliasResolver(s_ElementResolver);
             compiler.AddAliasResolver(s_ParentResolver);
             compiler.AddAliasResolver(s_RouteResolver);
-            compiler.AddAliasResolver(s_RouteParameterResolver);
             compiler.AddAliasResolver(s_ContentSizeResolver);
             compiler.AddAliasResolver(s_UrlResolver);
             compiler.AddAliasResolver(s_RgbResolver);

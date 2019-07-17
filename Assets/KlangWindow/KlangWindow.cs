@@ -28,7 +28,7 @@ namespace UI {
         public event Action onOpen;
         public event Action onClose;
 
-        public override void OnReady() {
+        public override void OnCreate() {
             allowedDragSides &= ~(WindowSide.Left);
             runner = FindById("side-bar-runner");
             sidebar = FindById("side-bar");

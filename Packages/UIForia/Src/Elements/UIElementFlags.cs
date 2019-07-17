@@ -7,7 +7,7 @@ internal enum UIElementFlags {
     ImplicitElement = 1 << 1,
     Enabled = 1 << 2,
     AncestorEnabled = 1 << 3,
-    Destroyed = 1 << 4,
+    Alive = 1 << 4,
     AncestorDestroyed = 1 << 5,
     Primitive = 1 << 6,
     HasBeenEnabled = 1 << 7,
@@ -16,7 +16,7 @@ internal enum UIElementFlags {
     TemplateRoot = 1 << 10,
     BuiltIn = 1 << 11,
     CreatedExplicitly = 1 << 12, // was this element created via user code?
-    SelfAndAncestorEnabled = Enabled | AncestorEnabled,
+    SelfAndAncestorEnabled = Alive | Enabled | AncestorEnabled,
 
     Ready = 1 << 13,
 

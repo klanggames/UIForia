@@ -138,10 +138,6 @@ public class UIView {
         this.Application.RemoveView(this);
     }
 
-    public void BeginAddingElements() { }
-
-    public void EndAddingElements() { }
-
     internal void ElementRegistered(UIElement element) {
         elementCount++;
         onElementRegistered?.Invoke(element);

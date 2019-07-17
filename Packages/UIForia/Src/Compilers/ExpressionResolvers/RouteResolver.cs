@@ -3,38 +3,7 @@ using UIForia.Elements;
 using UIForia.Expressions;
 
 namespace UIForia.Compilers.ExpressionResolvers {
-
-    public class RouteParameterResolver : ExpressionAliasResolver {
-
-        public RouteParameterResolver(string aliasName) : base(aliasName) { }
-
-        public override Expression CompileAsDotExpression(CompilerContext context, string propertyName) {
-            return new ParameterReaderExpression(propertyName);
-        }
-
-        public class ParameterReaderExpression : Expression<string> {
-
-            public readonly string parameterName;
-
-            public ParameterReaderExpression(string parameterName) {
-                this.parameterName = parameterName;
-            }
-
-            public override Type YieldedType => typeof(string);
-
-            public override string Evaluate(ExpressionContext context) {
-                UIElement element = (UIElement) context.currentObject;
-                return element.GetRouteParameter(parameterName);
-            }
-
-            public override bool IsConstant() {
-                return false;
-            }
-
-        }
-
-    }
-
+    
     public class RouteResolver : ExpressionAliasResolver {
 
         public RouteResolver(string aliasName) : base(aliasName) { }

@@ -176,7 +176,7 @@ namespace UIForia.Systems {
 
         public void SetStyleProperty(UIElement element, StyleProperty property) {
             
-            if (element.isDisabled || !element.isReady) return;
+            if (element.isDisabled) return;
             
             AddToChangeSet(element, property);
 

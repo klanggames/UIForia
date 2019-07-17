@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using JetBrains.Annotations;
 using UIForia.Compilers;
 using UIForia.Elements.Routing;
 using UIForia.Expressions;
 using UIForia.Layout;
-using UIForia.Layout.LayoutTypes;
 using UIForia.Rendering;
 using UIForia.Routing;
 using UIForia.Selectors;
@@ -102,9 +100,7 @@ namespace UIForia.Elements {
         internal LightList<UIElement> children; // todo -- replace w/ linked list & child count
 
         public ExpressionContext templateContext; // todo -- can probably be moved to binding system
-
-        internal int enablePhase; // todo -- can probably be removed
-
+        
         internal UIElementFlags flags;
         internal UIElement parent;
 
@@ -117,11 +113,8 @@ namespace UIForia.Elements {
         internal SelectorNode selectorNode;
         
         internal StructList<ElementAttribute> attributes;
-        
         public UIView View { get; internal set; }
-        
         public Vector2 scrollOffset { get; internal set; }
-
         public int depth { get; internal set; }
         public int siblingIndex { get; internal set; }
         
@@ -132,7 +125,7 @@ namespace UIForia.Elements {
             this.id = Application.NextElementId;
             this.style = new UIStyleSet(this);
             this.layoutResult = new LayoutResult();
-            this.flags = UIElementFlags.Enabled;
+            this.flags = UIElementFlags.Enabled | UIElementFlags.Alive;
             this.children = LightList<UIElement>.Get();
         }
 
@@ -166,28 +159,22 @@ namespace UIForia.Elements {
 
         public bool isSelfDisabled => (flags & UIElementFlags.Enabled) == 0;
 
-        public bool isEnabled => !isDestroyed && (flags & UIElementFlags.SelfAndAncestorEnabled) == UIElementFlags.SelfAndAncestorEnabled;
+        public bool isEnabled => (flags & UIElementFlags.Alive) == 0 && (flags & UIElementFlags.SelfAndAncestorEnabled) == UIElementFlags.SelfAndAncestorEnabled;
 
         public bool isDisabled => isDestroyed || (flags & UIElementFlags.Enabled) == 0 || (flags & UIElementFlags.AncestorEnabled) == 0;
 
         public bool hasDisabledAncestor => (flags & UIElementFlags.AncestorEnabled) == 0;
 
-        public bool isDestroyed => (flags & UIElementFlags.Destroyed) != 0;
+        public bool isDestroyed => (flags & UIElementFlags.Alive) == 0;
 
         public bool isBuiltIn => (flags & UIElementFlags.BuiltIn) != 0;
 
         internal bool isPrimitive => (flags & UIElementFlags.Primitive) != 0;
 
         public bool isCreated => (flags & UIElementFlags.Created) != 0;
-
-        public bool isReady => (flags & UIElementFlags.Ready) != 0;
-
-        public bool isRegistered => (flags & UIElementFlags.Registered) != 0;
-
+        
         public virtual void OnCreate() { }
-
-        public virtual void OnReady() { }
-
+        
         public virtual void OnUpdate() { }
 
         public virtual void OnEnable() { }
@@ -373,7 +360,16 @@ namespace UIForia.Elements {
         }
 
         public List<ElementAttribute> GetAttributes(List<ElementAttribute> retn = null) {
-            return s_ColdDataMap.GetOrDefault(id).GetAttributes(retn);
+            retn = retn ?? new List<ElementAttribute>();
+            if (attributes == null || attributes.size == 0) {
+                return retn;
+            }
+
+            for (int i = 0; i < attributes.size; i++) {
+                retn.Add(attributes.array[i]);
+            }
+
+            return retn;
         }
 
         public void SetAttribute(string name, string value) {
@@ -403,32 +399,45 @@ namespace UIForia.Elements {
             Application.OnAttributeAdded(this, name, value);
         }
 
+        public bool TryGetAttribute(string key, out string value) {
+            if (attributes == null) {
+                value = null;
+                return false;
+            }
+
+            ElementAttribute[] attrs = attributes.array;
+            int attrCount = attributes.size;
+            
+            for (int i = 0; i < attrCount; i++) {
+                if (attrs[i].name == key) {
+                    value = attrs[i].value;
+                    return true;
+                }    
+            }
+
+            value = null;
+            return false;
+        }
+
         public string GetAttribute(string attr) {
-            ElementColdData coldData = s_ColdDataMap.GetOrDefault(id);
-            if (coldData.TryGetAttribute(attr, out ElementAttribute retn)) {
-                return retn.value;
+            if (attributes == null) {
+                return null;
+            }
+
+            ElementAttribute[] attrs = attributes.array;
+            int attrCount = attributes.size;
+            
+            for (int i = 0; i < attrCount; i++) {
+                if (attrs[i].name == attr) {
+                    return attrs[i].value;
+                }    
             }
 
             return null;
         }
 
         public bool HasAttribute(string name) {
-            return s_ColdDataMap.GetOrDefault(id).GetAttribute(name).value != null;
-        }
-
-        // todo remove
-        public RouteParameter GetRouteParameter(string name) {
-            UIElement ptr = this;
-
-            while (ptr != null) {
-                if (ptr is RouteElement routeElement) {
-                    return routeElement.CurrentMatch.GetParameter(name);
-                }
-
-                ptr = ptr.parent;
-            }
-
-            return default;
+            return GetAttribute(name) != null;
         }
         
         public int UniqueId => id;

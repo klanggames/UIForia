@@ -6,8 +6,8 @@ namespace UIForia.Util {
 
     public class LightStack<T> {
 
-        private T[] array;
-        private int size;
+        public T[] array;
+        public int size;
         private bool isPooled;
 
         public int Count => size;

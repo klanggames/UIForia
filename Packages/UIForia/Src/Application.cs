@@ -11,6 +11,7 @@ using UIForia.Extensions;
 using UIForia.Parsing.Expression;
 using UIForia.Rendering;
 using UIForia.Routing;
+using UIForia.Selectors;
 using UIForia.Systems;
 using UIForia.Systems.Input;
 using UIForia.Util;
@@ -132,7 +133,7 @@ namespace UIForia {
             this.m_Systems = new List<ISystem>();
             this.m_Views = new List<UIView>();
             this.selectorUpdates = new LightList<UIElement>();
-            
+
             m_StyleSystem = new StyleSystem();
             m_BindingSystem = new BindingSystem();
             m_LayoutSystem = new LayoutSystem(this, m_StyleSystem);
@@ -162,7 +163,7 @@ namespace UIForia {
             if (settings.usePreCompiledTemplates) {
                 // todo -- load templates
             }
-            
+
 #if UNITY_EDITOR
             Applications.Add(this);
 #endif
@@ -383,7 +384,7 @@ namespace UIForia {
         }
 
         internal void DoDestroyElement(UIElement element) {
-            if ((element.flags & UIElementFlags.Destroyed) != 0) {
+            if ((element.flags & UIElementFlags.Alive) != 0) {
                 return;
             }
 
@@ -402,7 +403,7 @@ namespace UIForia {
                 }
 
                 if (!current.isDestroyed) {
-                    current.flags |= UIElementFlags.Destroyed;
+                    current.flags |= UIElementFlags.Alive;
                     current.OnDestroy();
                     toInternalDestroy.Add(current);
                 }
@@ -462,7 +463,7 @@ namespace UIForia {
 
                 if (!current.isDestroyed) {
                     current.flags &= ~(UIElementFlags.Enabled);
-                    current.flags |= UIElementFlags.Destroyed;
+                    current.flags |= UIElementFlags.Alive;
                     current.OnDestroy();
                     toInternalDestroy.Add(current);
                 }
@@ -497,7 +498,7 @@ namespace UIForia {
         public void Update() {
             m_InputSystem.OnUpdate();
             linqBindingSystem.OnUpdate();
-            
+
             m_StyleSystem.UpdateSelectors();
 
             UIElement[] elements = selectorUpdates.array;
@@ -508,11 +509,10 @@ namespace UIForia {
                 }
 
                 element.flags &= ~(UIElementFlags.SelectorNeedsUpdate);
-                
             }
-            
+
             selectorUpdates.QuickClear();
-            
+
             m_StyleSystem.UpdateBindings();
             m_StyleSystem.UpdateAnimations();
             m_StyleSystem.Flush();
@@ -567,211 +567,116 @@ namespace UIForia {
         }
 
         public void DoEnableElement(UIElement element) {
-            if (element.isDestroyed) {
+            element.flags |= UIElementFlags.Enabled;
+
+            // if element is not enabled (ie has a disabled ancestor or is not alive), no-op 
+            if ((element.flags & UIElementFlags.SelfAndAncestorEnabled) != UIElementFlags.SelfAndAncestorEnabled) {
                 return;
             }
 
-            element.flags |= UIElementFlags.Enabled;
-            // if element is not enabled (ie has a disabled ancestor), no-op 
-            if (!element.isEnabled) return;
-
-            int targetPhase = -1;
-
-            UIElement ptr = element.parent;
-            if (!ptr.isReady) {
-                while (ptr != null) {
-                    if (ptr.enablePhase != 0) { // todo -- remove this element field and make it an element flag
-                        targetPhase = ptr.enablePhase;
-                        break;
-                    }
-
-                    ptr = ptr.parent;
-                }
-            }
-
+            // don't really need the stack here but it should give us a properly sized array since so many systems need light stacks of elements
             LightStack<UIElement> stack = LightStack<UIElement>.Get();
-            UIElement[] children;
-            int childCount;
-
-            stack.Push(element);
-
-            element.enablePhase = 1;
-            while (stack.Count > 0) {
-                UIElement child = stack.PopUnchecked();
-
-                if (child.isDestroyed) {
-                    continue;
-                }
-
-                if (child.parent.isEnabled) {
-                    child.flags |= UIElementFlags.AncestorEnabled;
-                }
-
-                if (child.isEnabled && !child.isCreated) {
-                    child.flags |= UIElementFlags.Created;
-                    child.OnCreate();
-                    child.View.ElementCreated(child);
-                }
-
-                if (child.isDisabled) {
-                    continue;
-                }
-
-                children = child.children.Array;
-                childCount = child.children.Count;
-                for (int i = childCount - 1; i >= 0; i--) {
-                    stack.Push(children[i]);
-                }
-            }
 
             // if element is now enabled we need to walk it's children
             // and set enabled ancestor flags until we find a self-disabled child
-            stack.Push(element);
-            element.enablePhase = 2;
+            stack.array[stack.size++] = element;
 
-            if (!element.isEnabled || (targetPhase != -1 && targetPhase <= 2)) {
-                element.enablePhase = 0;
-                LightStack<UIElement>.Release(ref stack);
-                return;
-            }
+            // stack operations in the following code are inlined since this is a very hot path
+            while (stack.size > 0) {
+                // inline stack pop
+                UIElement child = stack.array[--stack.size];
 
-            element.flags |= UIElementFlags.AncestorEnabled;
-
-            foreach (ISystem system in m_Systems) {
-                system.OnElementEnabled(element);
-            }
-
-            while (stack.Count > 0) {
-                UIElement child = stack.PopUnchecked();
                 child.flags |= UIElementFlags.AncestorEnabled;
 
-                if (child.isSelfDisabled || child.isDestroyed) {
+                // if the element is itself disabled or destroyed, keep going
+                if ((child.flags & UIElementFlags.SelfAndAncestorEnabled) != UIElementFlags.SelfAndAncestorEnabled) {
                     continue;
                 }
 
+                // todo -- profile not calling enable when it's not needed
+                // if (child.flags & UIElementFlags.RequiresEnableCall) {
+                child.OnEnable();
+                // }
+
                 child.flags |= UIElementFlags.HasBeenEnabled;
 
-                child.OnEnable();
-
-                if (child.isEnabled) {
-                    RunEnableBinding(child);
-                    // need this isEnabled check in case a binding disabled the element
-                    if (!child.isEnabled) {
-                        continue;
+                if ((child.flags & UIElementFlags.SelfAndAncestorEnabled) == UIElementFlags.SelfAndAncestorEnabled) {
+                    UIElement[] children = child.children.array;
+                    int childCount = child.children.size;
+                    if (stack.size + childCount >= stack.array.Length) {
+                        Array.Resize(ref stack.array, stack.size + childCount + 16);
                     }
 
-                    children = child.children.Array;
-                    childCount = child.children.Count;
                     for (int i = childCount - 1; i >= 0; i--) {
-                        stack.Push(children[i]);
+                        // inline stack push
+                        stack.array[stack.size++] = children[i];
                     }
                 }
             }
 
-            element.enablePhase = 3;
-
-            if (targetPhase != -1 && targetPhase <= 3) {
-                element.enablePhase = 0;
-                LightStack<UIElement>.Release(ref stack);
-                return;
-            }
-
-            if (element.isEnabled) {
-                element.View.ElementHierarchyEnabled(element);
-                onElementEnabled?.Invoke(element);
-
-                stack.Push(element);
-
-                while (stack.Count > 0) {
-                    UIElement child = stack.PopUnchecked();
-
-                    if (child.isDestroyed) {
-                        continue;
-                    }
-
-                    if (child.isEnabled && !child.isReady) {
-                        child.flags |= UIElementFlags.Ready;
-                        child.OnReady();
-                        child.View.ElementReady(element);
-                    }
-
-                    if (child.isDisabled) {
-                        continue;
-                    }
-
-                    children = child.children.Array;
-                    childCount = child.children.Count;
-                    for (int i = childCount - 1; i >= 0; i--) {
-                        stack.Push(children[i]);
-                    }
-                }
-            }
-
-            element.enablePhase = 0;
             LightStack<UIElement>.Release(ref stack);
+
+            for (int i = 0; i < m_Systems.Count; i++) {
+                m_Systems[i].OnElementEnabled(element);
+            }
         }
 
-        // todo bad things happen if we add children during disabling or enabling (probably)
-
         public void DoDisableElement(UIElement element) {
-            // no-op for already disabled elements
-            if (!element.isCreated || element.isDisabled) {
-                element.flags &= ~(UIElementFlags.Enabled);
+            // if element is not enabled (ie has a disabled ancestor or is not alive), no-op 
+            if ((element.flags & UIElementFlags.SelfAndAncestorEnabled) != UIElementFlags.SelfAndAncestorEnabled) {
                 return;
             }
 
             element.flags &= ~(UIElementFlags.Enabled);
 
-            // if element was already disabled via ancestor, no-op
-            if (element.hasDisabledAncestor) {
-                return;
-            }
-
-            element.OnDisable();
-
-            if (element.isEnabled) {
-                return;
-            }
-
+            // don't really need the stack here but it should give us a properly sized array since so many systems need light stacks of elements
             LightStack<UIElement> stack = LightStack<UIElement>.Get();
 
-            UIElement[] children = element.children.Array;
-            int childCount = element.children.Count;
+            // if element is now enabled we need to walk it's children
+            // and set enabled ancestor flags until we find a self-disabled child
+            stack.array[stack.size++] = element;
 
-            for (int i = childCount - 1; i >= 0; i--) {
-                stack.Push(children[i]);
-            }
+            // stack operations in the following code are inlined since this is a very hot path
+            while (stack.size > 0) {
+                // inline stack pop
+                UIElement child = stack.array[--stack.size];
 
-            while (stack.Count > 0) {
-                UIElement child = stack.PopUnchecked();
                 child.flags &= ~(UIElementFlags.AncestorEnabled);
 
-                if (!child.isCreated) {
+                // if the element is itself already disabled, continue
+                if ((child.flags & UIElementFlags.Enabled) == 0) {
                     continue;
                 }
 
-                if ((child.flags & UIElementFlags.HasBeenEnabled) != 0) {
-                    child.OnDisable();
+                // todo -- profile not calling disable when it's not needed
+                // if (child.flags & UIElementFlags.RequiresEnableCall) {
+                child.OnDisable();
+                // }
+
+                // if destroyed the whole subtree is also destroyed, do nothing.
+                if ((child.flags & UIElementFlags.Alive) == 0) {
+                    continue;
                 }
 
-                if (child.isDisabled) {
-                    children = child.children.Array;
-                    childCount = child.children.Count;
+                // if child is still disabled after OnDisable, traverse it's children
+                if ((child.flags & UIElementFlags.SelfAndAncestorEnabled) != UIElementFlags.SelfAndAncestorEnabled) {
+                    UIElement[] children = child.children.array;
+                    int childCount = child.children.size;
+                    if (stack.size + childCount >= stack.array.Length) {
+                        Array.Resize(ref stack.array, stack.size + childCount + 16);
+                    }
+
                     for (int i = childCount - 1; i >= 0; i--) {
-                        stack.Push(children[i]);
+                        // inline stack push
+                        stack.array[stack.size++] = children[i];
                     }
                 }
             }
 
             LightStack<UIElement>.Release(ref stack);
 
-            if (element.isDisabled) {
-                foreach (ISystem system in m_Systems) {
-                    system.OnElementDisabled(element);
-                }
-
-                element.View.ElementHierarchyDisabled(element);
-                onElementDisabled?.Invoke(element);
+            for (int i = 0; i < m_Systems.Count; i++) {
+                m_Systems[i].OnElementDisabled(element);
             }
         }
 
@@ -779,7 +684,6 @@ namespace UIForia {
             return elementMap.GetOrDefault(elementId);
         }
 
-     
 
         public static void RefreshAll() {
             for (int i = 0; i < s_ApplicationList.Count; i++) {
@@ -831,6 +735,44 @@ namespace UIForia {
             return m_Views.ToArray();
         }
 
+        internal void InsertChild(UIElement parent, CompiledTemplate template, int index) {
+            UIElement ptr = parent;
+            LinqBindingNode bindingNode = null;
+
+            while (ptr != null) {
+                bindingNode = ptr.bindingNode;
+
+                if (bindingNode != null) {
+                    break;
+                }
+
+                ptr = ptr.parent;
+            }
+
+            TemplateScope2 templateScope = new TemplateScope2(this, bindingNode, null);
+            UIElement root = elementPool.Get(template.elementType.rawType);
+            root.siblingIndex = index;
+
+            if (parent.isEnabled) {
+                root.flags |= UIElementFlags.AncestorEnabled;
+            }
+
+            root.depth = parent.depth + 1;
+            root.View = parent.View;
+            template.Create(root, templateScope);
+
+            parent.children.Insert(index, root);
+            SetSelectorDirty(parent, SelectorFlags.Selector_ChildAdded);
+        }
+
+        internal void SetSelectorDirty(UIElement element, SelectorFlags flag) {
+            if ((element.flags & (UIElementFlags) SelectorFlags.SelectorNeedsUpdate) == 0) {
+                selectorUpdates.Add(element);
+            }
+
+            element.flags |= (UIElementFlags) flag;
+        }
+
         internal void InsertChild(UIElement parent, UIElement child, uint index) {
             if (child.parent != null) {
                 throw new NotImplementedException("Reparenting is not supported");
@@ -854,7 +796,6 @@ namespace UIForia {
             UIView view = parent.View;
             stack.Push(child);
 
-            view.BeginAddingElements();
 
             while (stack.Count > 0) {
                 UIElement current = stack.Pop();
@@ -874,18 +815,6 @@ namespace UIForia {
 
                 elementMap[current.id] = current;
 
-                if (!current.isRegistered) {
-                    
-                    current.flags |= UIElementFlags.Registered;
-                    
-                    for (int i = 0; i < m_Systems.Count; i++) {
-                        m_Systems[i].OnElementCreated(current);
-                    }
-
-                    view.ElementRegistered(current);
-                    onElementRegistered?.Invoke(current);
-                }
-
                 UIElement[] children = current.children.Array;
                 int childCount = current.children.Count;
                 // reverse this?
@@ -898,8 +827,6 @@ namespace UIForia {
             for (int i = 0; i < parent.children.Count; i++) {
                 parent.children[i].siblingIndex = i;
             }
-
-            view.EndAddingElements();
 
             LightStack<UIElement>.Release(ref stack);
 
@@ -982,38 +909,33 @@ namespace UIForia {
             return element;
         }
 
-        
+
         public void OnAttributeAdded(UIElement element, string name, string value) {
-            
             if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
                 selectorUpdates.Add(element);
             }
 
             element.flags |= UIElementFlags.Selector_AttributeAdded;
-        
         }
-        
+
         public void OnAttributeRemoved(UIElement element, string name, string value) {
-            
             if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
                 selectorUpdates.Add(element);
             }
 
             element.flags |= UIElementFlags.Selector_AttributeRemoved;
-        
         }
-        
+
         public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string previousValue) {
             for (int i = 0; i < m_Systems.Count; i++) {
                 m_Systems[i].OnAttributeSet(element, attributeName, currentValue, previousValue);
             }
-            
+
             if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
                 selectorUpdates.Add(element);
             }
 
             element.flags |= UIElementFlags.Selector_AttributeChanged;
-
         }
 
     }

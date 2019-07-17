@@ -90,10 +90,10 @@ namespace LifeCycle {
                 onCreate?.Invoke(this);
             }
 
-            public override void OnReady() {
-                output.Add(name + ".ready");
-                onReady?.Invoke(this);
-            }
+//            public override void OnReady() {
+//                output.Add(name + ".ready");
+//                onReady?.Invoke(this);
+//            }
 
             public override void OnEnable() {
                 output.Add(name + ".enable");
