@@ -140,7 +140,6 @@ namespace UIForia.Systems {
 
         }
 
-
         public void RunLayout(UIView view) {
             m_VisibleBoxList.QuickClear();
             view.visibleElements.QuickClear();
@@ -311,7 +310,6 @@ namespace UIForia.Systems {
 
                 layoutResult.overflowSize = new Size(box.xMax, box.yMax);
                 layoutResult.localPosition = localPosition;
-
 
                 layoutResult.actualSize = new Size(box.actualWidth, box.actualHeight);
                 layoutResult.allocatedSize = new Size(box.allocatedWidth, box.allocatedHeight);

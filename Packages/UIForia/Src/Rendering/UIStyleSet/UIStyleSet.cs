@@ -4,6 +4,7 @@ using System.Diagnostics;
 using SVGX;
 using UIForia.Compilers.Style;
 using UIForia.Elements;
+using UIForia.Selectors;
 using UIForia.Systems;
 using UIForia.Templates;
 using UIForia.Util;
@@ -888,6 +889,14 @@ namespace UIForia.Rendering {
                 
                 // style.whitespace = Preserve Collapse
             };
+        }
+
+        public void AddSelectorStyleGroup(Selector selector) {
+            throw new NotImplementedException();
+        }
+
+        public void RemoveSelectorStyleGroup(Selector selector) {
+            throw new NotImplementedException();
         }
 
     }

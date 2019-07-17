@@ -215,8 +215,6 @@ namespace UIForia.Compilers {
             LightList<string>.Release(ref namespaces);
 
             //todo  release context
-
-            application.templateCache.Add(retn);
             
             return retn;
         }
