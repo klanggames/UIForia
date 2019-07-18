@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UIForia.Elements;
 using UIForia.Rendering;
+using UIForia.Selectors;
 using UIForia.Util;
 
 namespace UIForia.Systems {
@@ -32,23 +33,26 @@ namespace UIForia.Systems {
 
         private readonly IntMap<ChangeSet> m_ChangeSets;
 
+        private readonly LightList<Selector> selectorUpdates;
+        private readonly Dictionary<string, LightList<Selector>> selectorAttributeMap;
+
         public StyleSystem() {
             this.m_ChangeSets = new IntMap<ChangeSet>();
+            this.selectorAttributeMap = new Dictionary<string, LightList<Selector>>();
+            this.selectorUpdates = new LightList<Selector>();
         }
-        
+
         public void OnReset() { }
 
         public void OnElementCreated(UIElement element) {
-
             element.style.styleSystem = this;
         }
-        
-        private void OnElementEnabledStep(UIElement element, StructList<StyleProperty> parentProperties) {
 
+        private void OnElementEnabledStep(UIElement element, StructList<StyleProperty> parentProperties) {
             if (element.isDisabled) {
                 return;
             }
-            
+
             int count = parentProperties.Count;
             StyleProperty[] parentPropertiesArray = parentProperties.Array;
 
@@ -63,7 +67,7 @@ namespace UIForia.Systems {
             for (int i = 0; i < count; i++) {
                 element.style.SetInheritedStyle(parentPropertiesArray[i]);
             }
-            
+
             StructList<StyleProperty> inheritedProperties = StructList<StyleProperty>.Get();
             inheritedProperties.EnsureCapacity(count);
             StyleProperty[] inheritedPropertiesArray = inheritedProperties.Array;
@@ -71,6 +75,7 @@ namespace UIForia.Systems {
             for (int i = 0; i < count; i++) {
                 inheritedPropertiesArray[i] = element.style.GetComputedStyleProperty(StyleUtil.InheritedProperties[i]);
             }
+
             inheritedProperties.Count = count;
 
             for (int i = 0; i < element.children.Count; i++) {
@@ -136,7 +141,6 @@ namespace UIForia.Systems {
                 StructList<StyleProperty>.Release(ref inheritedProperties);
             }
             else {
-                
                 StructList<StyleProperty> inheritedProperties = StructList<StyleProperty>.Get();
                 inheritedProperties.EnsureCapacity(StyleUtil.InheritedProperties.Count);
                 StyleProperty[] inheritedPropertiesArray = inheritedProperties.Array;
@@ -148,7 +152,6 @@ namespace UIForia.Systems {
                 OnElementEnabledStep(element, inheritedProperties);
                 StructList<StyleProperty>.Release(ref inheritedProperties);
             }
-
         }
 
         public void OnElementDisabled(UIElement element) {
@@ -160,8 +163,22 @@ namespace UIForia.Systems {
             m_ChangeSets.Remove(element.id);
         }
 
-        public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string attributeValue) {
-            element.style.UpdateApplicableAttributeRules(attributeName, attributeValue);
+        public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string previousValue) {
+            element.style.UpdateApplicableAttributeRules(attributeName, currentValue);
+            if (selectorAttributeMap.TryGetValue(attributeName, out LightList<Selector> selectorList)) {
+                Selector[] selectors = selectorList.array;
+
+                for (int i = 0; i < selectorList.size; i++) {
+                    Selector selector = selectors[i];
+                    if (selector.needsUpdate) continue;
+
+                    selector.HandleAttributeChanged(element, attributeName, currentValue, previousValue);
+
+                    if (selector.needsUpdate) {
+                        selectorUpdates.Add(selector);
+                    }
+                }
+            }
         }
 
         private void AddToChangeSet(UIElement element, StyleProperty property) {
@@ -175,9 +192,8 @@ namespace UIForia.Systems {
         }
 
         public void SetStyleProperty(UIElement element, StyleProperty property) {
-            
             if (element.isDisabled) return;
-            
+
             AddToChangeSet(element, property);
 
             if (!StyleUtil.IsInherited(property.propertyId) || element.children == null || element.children.Count == 0) {
@@ -233,16 +249,22 @@ namespace UIForia.Systems {
         }
 
         public void UpdateSelectors() {
+            Selector[] selectors = selectorUpdates.array;
+
+            for (int i = 0; i < selectorUpdates.size; i++) {
+                Selector selector = selectors[i];
+                selector.Run();
+                selector.needsUpdate = false;
+            }
+
+            selectorUpdates.QuickClear();
         }
 
-        public void UpdateBindings() {
-        }
+        public void UpdateBindings() { }
 
-        public void UpdateAnimations() {
-        }
+        public void UpdateAnimations() { }
 
-        public void Flush() {
-        }
+        public void Flush() { }
 
         private struct ChangeSet {
 

@@ -51,6 +51,9 @@ namespace SVGX {
         private const int VertexType_Near = 1;
         private const int VertexType_Far = 0;
 
+//        private static List<Vector3> s_Vector3List = new List<Vector3>(0);
+//        private static List<Vector3> s_PositionList = new List<Vector3>(0);
+        
         public Mesh FillMesh() {
             mesh.Clear(true);
 
@@ -63,6 +66,7 @@ namespace SVGX {
             mesh.SetUVs(4, uv4List);
             mesh.SetTriangles(trianglesList, 0);
 
+//            ListAccessor<Vector3>.Set(positionList, p);
             positionList.Clear();
             uv0List.Clear();
             uv1List.Clear();

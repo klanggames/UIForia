@@ -35,7 +35,6 @@ namespace UIForia {
         protected ILayoutSystem m_LayoutSystem;
         protected IRenderSystem m_RenderSystem;
         protected IInputSystem m_InputSystem;
-        protected RoutingSystem m_RoutingSystem;
         protected AnimationSystem m_AnimationSystem;
         protected LinqBindingSystem linqBindingSystem;
 
@@ -78,7 +77,6 @@ namespace UIForia {
 
         public static readonly UIForiaSettings Settings;
         private ElementPool elementPool;
-        private LightList<UIElement> selectorUpdates;
 
         static Application() {
             ArrayPool<UIElement>.SetMaxPoolSize(64);
@@ -98,7 +96,7 @@ namespace UIForia {
         // todo -- override that accepts an index into an array instead of a type, to save a dictionary lookup
         // todo -- don't create a list for every type, maybe a single pool list w/ sorting & a jump search or similar
         public UIElement CreateElementFromPool(Type type, UIElement parent, int childCount) {
-            UIElement retn = elementPool.Get(type);
+            UIElement retn = elementPool.Get(type, parent.depth + 1);
             retn.children = LightList<UIElement>.GetMinSize(childCount);
             retn.children.size = childCount;
             if (parent != null) {
@@ -132,7 +130,6 @@ namespace UIForia {
             this.elementPool = new ElementPool();
             this.m_Systems = new List<ISystem>();
             this.m_Views = new List<UIView>();
-            this.selectorUpdates = new LightList<UIElement>();
 
             m_StyleSystem = new StyleSystem();
             m_BindingSystem = new BindingSystem();
@@ -140,7 +137,6 @@ namespace UIForia {
             m_InputSystem = new GameInputSystem(m_LayoutSystem);
 //            m_RenderSystem = new VertigoRenderSystem(Camera.current, m_LayoutSystem, m_StyleSystem); 
             m_RenderSystem = new SVGXRenderSystem(this, null, m_LayoutSystem);
-            m_RoutingSystem = new RoutingSystem();
             m_AnimationSystem = new AnimationSystem();
             linqBindingSystem = new LinqBindingSystem();
 
@@ -151,7 +147,6 @@ namespace UIForia {
 
             m_Systems.Add(m_StyleSystem);
             m_Systems.Add(m_BindingSystem);
-            m_Systems.Add(m_RoutingSystem);
             m_Systems.Add(m_InputSystem);
             m_Systems.Add(m_AnimationSystem);
             m_Systems.Add(m_LayoutSystem);
@@ -215,7 +210,7 @@ namespace UIForia {
         public IRenderSystem RenderSystem => m_RenderSystem;
         public ILayoutSystem LayoutSystem => m_LayoutSystem;
         public IInputSystem InputSystem => m_InputSystem;
-        public RoutingSystem RoutingSystem => m_RoutingSystem;
+        public RoutingSystem RoutingSystem => throw new NotImplementedException("Remove routing as a system");
 
         public Camera Camera { get; private set; }
         public LinqBindingSystem LinqBindingSystem => linqBindingSystem;
@@ -500,19 +495,6 @@ namespace UIForia {
             linqBindingSystem.OnUpdate();
 
             m_StyleSystem.UpdateSelectors();
-
-            UIElement[] elements = selectorUpdates.array;
-            for (int i = 0; i < selectorUpdates.size; i++) {
-                UIElement element = elements[i];
-                if (element.isEnabled) {
-                    element.selectorNode.Update(element);
-                }
-
-                element.flags &= ~(UIElementFlags.SelectorNeedsUpdate);
-            }
-
-            selectorUpdates.QuickClear();
-
             m_StyleSystem.UpdateBindings();
             m_StyleSystem.UpdateAnimations();
             m_StyleSystem.Flush();
@@ -750,7 +732,7 @@ namespace UIForia {
             }
 
             TemplateScope2 templateScope = new TemplateScope2(this, bindingNode, null);
-            UIElement root = elementPool.Get(template.elementType.rawType);
+            UIElement root = elementPool.Get(template.elementType.rawType, parent.depth);
             root.siblingIndex = index;
 
             if (parent.isEnabled) {
@@ -762,78 +744,37 @@ namespace UIForia {
             template.Create(root, templateScope);
 
             parent.children.Insert(index, root);
-            SetSelectorDirty(parent, SelectorFlags.Selector_ChildAdded);
         }
 
-        internal void SetSelectorDirty(UIElement element, SelectorFlags flag) {
-            if ((element.flags & (UIElementFlags) SelectorFlags.SelectorNeedsUpdate) == 0) {
-                selectorUpdates.Add(element);
-            }
-
-            element.flags |= (UIElementFlags) flag;
-        }
-
-        internal void InsertChild(UIElement parent, UIElement child, uint index) {
-            if (child.parent != null) {
-                throw new NotImplementedException("Reparenting is not supported");
-            }
-
-            bool hasView = child.View != null;
-
-            // we don't know the hierarchy at this point.
-            // could be made up of a mix of elements in various states
-
-            child.parent = parent;
-            parent.children.Insert((int) index, child);
-
-            if (hasView) {
-                throw new NotImplementedException("Changing views is not supported");
-            }
-
-            bool parentEnabled = parent.isEnabled;
-
-            LightStack<UIElement> stack = LightStack<UIElement>.Get();
-            UIView view = parent.View;
-            stack.Push(child);
-
-
-            while (stack.Count > 0) {
-                UIElement current = stack.Pop();
-
-                current.depth = current.parent.depth + 1;
-
-                // todo -- we don't support changing views or any sort of re-parenting
-
-                current.View = view;
-
-                if (current.parent.isEnabled) {
-                    current.flags |= UIElementFlags.AncestorEnabled;
-                }
-                else {
-                    current.flags &= ~UIElementFlags.AncestorEnabled;
-                }
-
-                elementMap[current.id] = current;
-
-                UIElement[] children = current.children.Array;
-                int childCount = current.children.Count;
-                // reverse this?
-                for (int i = 0; i < childCount; i++) {
-                    children[i].siblingIndex = i;
-                    stack.Push(children[i]);
-                }
-            }
-
-            for (int i = 0; i < parent.children.Count; i++) {
-                parent.children[i].siblingIndex = i;
-            }
-
-            LightStack<UIElement>.Release(ref stack);
-
-            if (parentEnabled && child.isEnabled) {
-                child.flags &= ~UIElementFlags.Enabled;
-                DoEnableElement(child);
-            }
+        internal void InsertChild(UIElement parent, StoredTemplate template, int index) {
+            throw new NotImplementedException();
+//            UIElement ptr = parent;
+//            LinqBindingNode bindingNode = null;
+//
+//            while (ptr != null) {
+//                bindingNode = ptr.bindingNode;
+//
+//                if (bindingNode != null) {
+//                    break;
+//                }
+//
+//                ptr = ptr.parent;
+//            }
+//
+//            TemplateScope2 templateScope = new TemplateScope2(this, bindingNode, null);
+//            UIElement root = elementPool.Get(template.elementType.rawType);
+//            root.siblingIndex = index;
+//
+//            if (parent.isEnabled) {
+//                root.flags |= UIElementFlags.AncestorEnabled;
+//            }
+//
+//            root.depth = parent.depth + 1;
+//            root.View = parent.View;
+//            template.Create(root, templateScope);
+//
+//            parent.children.Insert(index, root);
+//            SetSelectorDirty(parent, SelectorFlags.Selector_ChildAdded);
         }
 
         public void SortViews() {
@@ -849,15 +790,6 @@ namespace UIForia {
             }
 
             onViewsSorted?.Invoke(m_Views.ToArray());
-        }
-
-
-        internal UIElement InsertChildFromTemplate(UIElement parent, in StoredTemplate storedTemplate, uint index) {
-            // CompiledTemplate template = templateData.templateFns[storedTemplate.templateId];
-            // template.CreateStored(parent, storedTemplate.closureRoot, slots?, context? bindingNode?)
-//            UIElement child = template.Create(parent, new TemplateScope2(this, null, StructList<SlotUsage>.Get()));
-//            return child;
-            throw new NotImplementedException();
         }
 
         internal LightList<SlotUsageTemplate> slotUsageTemplates = new LightList<SlotUsageTemplate>(128);
@@ -909,33 +841,12 @@ namespace UIForia {
             return element;
         }
 
-
-        public void OnAttributeAdded(UIElement element, string name, string value) {
-            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
-                selectorUpdates.Add(element);
-            }
-
-            element.flags |= UIElementFlags.Selector_AttributeAdded;
-        }
-
-        public void OnAttributeRemoved(UIElement element, string name, string value) {
-            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
-                selectorUpdates.Add(element);
-            }
-
-            element.flags |= UIElementFlags.Selector_AttributeRemoved;
-        }
-
         public void OnAttributeSet(UIElement element, string attributeName, string currentValue, string previousValue) {
+            
             for (int i = 0; i < m_Systems.Count; i++) {
                 m_Systems[i].OnAttributeSet(element, attributeName, currentValue, previousValue);
             }
 
-            if ((element.flags & UIElementFlags.SelectorNeedsUpdate) == 0) {
-                selectorUpdates.Add(element);
-            }
-
-            element.flags |= UIElementFlags.Selector_AttributeChanged;
         }
 
     }

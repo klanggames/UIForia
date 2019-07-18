@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using JetBrains.Annotations;
 using UIForia.Compilers;
@@ -190,46 +191,50 @@ namespace UIForia.Elements {
         }
 
         public UIElement InsertChild(uint idx, UIElement element) {
-            if (element == null || element == this || element.isDestroyed) {
-                return null;
-            }
-
-            if (View == null) {
-                element.parent = this;
-                element.View = null;
-                element.siblingIndex = children.Count;
-                element.depth = depth + 1;
-                children.Insert((int) idx, element);
-            }
-            else {
-                Application.InsertChild(this, element, (uint) children.Count);
-            }
-
-            return element;
+            throw new NotImplementedException();
+//            if (element == null || element == this || element.isDestroyed) {
+//                return null;
+//            }
+//
+//            if (View == null) {
+//                element.parent = this;
+//                element.View = null;
+//                element.siblingIndex = children.Count;
+//                element.depth = depth + 1;
+//                children.Insert((int) idx, element);
+//            }
+//            else {
+//                Application.InsertChild(this, element, (uint) children.Count);
+//            }
+//
+//            return element;
         }
 
         public UIElement AddChild(UIElement element) {
-            // todo -- if <Children/> is defined in the template, attach child to that element instead
-            if (element == null || element == this || element.isDestroyed) {
-                return null;
-            }
+            throw new NotImplementedException();
 
-            if (View == null) {
-                element.parent = this;
-                element.View = null;
-                element.siblingIndex = children.Count;
-                element.depth = depth + 1;
-                children.Add(element);
-            }
-            else {
-                Application.InsertChild(this, element, (uint) children.Count);
-            }
-
-            return element;
+//            // todo -- if <Children/> is defined in the template, attach child to that element instead
+//            if (element == null || element == this || element.isDestroyed) {
+//                return null;
+//            }
+//
+//            if (View == null) {
+//                element.parent = this;
+//                element.View = null;
+//                element.siblingIndex = children.Count;
+//                element.depth = depth + 1;
+//                children.Add(element);
+//            }
+//            else {
+//                Application.InsertChild(this, element, (uint) children.Count);
+//            }
+//
+//            return element;
         }
 
         public UIElement AddChild(in StoredTemplate storedTemplate) {
-            return Application.InsertChildFromTemplate(this, storedTemplate, (uint)children.Count);
+            throw new NotImplementedException();
+           // return Application.InsertChild(this, storedTemplate, (uint)children.Count);
         }
 
         public void TriggerEvent(UIEvent evt) {
@@ -395,8 +400,7 @@ namespace UIForia.Elements {
             }
             
             attributes.Add(new ElementAttribute(name, value));
-            // coldData.onAttributeSet?.Invoke(this, name, value, oldValue);
-            Application.OnAttributeAdded(this, name, value);
+            Application.OnAttributeSet(this, name, value, null);
         }
 
         public bool TryGetAttribute(string key, out string value) {

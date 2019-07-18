@@ -58,7 +58,7 @@ public class UIView {
     internal LightList<UIElement> visibleElements;
     internal UIViewRootElement rootElement;
     private int elementCount;
-    
+
     public bool clipOverflow;
 
     public bool focusOnMouseDown;
@@ -105,15 +105,14 @@ public class UIView {
     }
 
     public UIElement AddChild(UIElement element) {
-        Application.InsertChild(rootElement, element, (uint) rootElement.children.Count);
-        return element;
+        throw new NotImplementedException();
     }
 
     internal void Initialize() {
         elementCount = 1;
         sizeChanged = true;
         rootElement.children.Clear();
-        
+
         if (m_ElementType == null) {
             return;
         }
@@ -123,7 +122,7 @@ public class UIView {
         UIElement element = compiledTemplate.Create(null, new TemplateScope2(Application, bindingNode, null));
         rootElement.AddChild(element);
     }
-    
+
     public int GetElementCount() {
         return elementCount;
     }
@@ -168,6 +167,7 @@ public class UIView {
         if (position != Viewport.position) {
             sizeChanged = true;
         }
+
         Viewport = new Rect(position.x, position.y, Viewport.width, Viewport.height);
     }
 
@@ -175,6 +175,7 @@ public class UIView {
         if (width != Viewport.width || height != Viewport.height) {
             sizeChanged = true;
         }
+
         Viewport = new Rect(Viewport.x, Viewport.y, width, height);
     }
 
@@ -208,6 +209,7 @@ public class UIView {
                     view.Depth--;
                 }
             }
+
             Depth = views.Length - 1;
             Application.SortViews();
             return true;
@@ -215,4 +217,5 @@ public class UIView {
 
         return false;
     }
+
 }

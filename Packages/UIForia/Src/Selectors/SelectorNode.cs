@@ -46,9 +46,17 @@ namespace UIForia.Selectors {
         public LightList<UIElement> matchedElements;
         public SelectorFlags mask;
 
+        public bool needsUpdate;
+
+        public void HandleAttributeChanged(UIElement element, string attributeName, string currentValue, string previousValue) {
+            
+        }
+        
         public Selector() {
             
         }
+
+        public void Run() { }
 
         public void ElementChanged(UIElement element) {
             if ((mask & (SelectorFlags) element.flags) == 0) {
