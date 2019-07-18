@@ -47,7 +47,7 @@ namespace SVGX {
             return new Vector2(point.x * m0 + point.y * m2, point.x * m1 + point.y * m3);
         }
 
-        public SVGXMatrix Multiply(SVGXMatrix secondMatrix) {
+        public SVGXMatrix Multiply(in SVGXMatrix secondMatrix) {
             float sa = secondMatrix.m0;
             float sb = secondMatrix.m1;
             float sc = secondMatrix.m2;
@@ -64,7 +64,7 @@ namespace SVGX {
             );
         }
 
-        public static SVGXMatrix operator *(SVGXMatrix left, SVGXMatrix right) {
+        public static SVGXMatrix operator *(in SVGXMatrix left, in SVGXMatrix right) {
             return new SVGXMatrix(
                 left.m0 * right.m0 + left.m2 * right.m1,
                 left.m1 * right.m0 + left.m3 * right.m1,

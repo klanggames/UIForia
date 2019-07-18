@@ -61,6 +61,7 @@ Shader "UIForia/BatchedTransparent" {
                 float4 fragData2 : TEXCOORD3;
                 float4 fragData3 : TEXCOORD4;
                 float4 scissorRect : TEXCOORD5;
+                float4 opacity : TEXCOORD6; // temp
            };
 
            #include "BatchedTransparentText.cginc"
@@ -152,11 +153,11 @@ Shader "UIForia/BatchedTransparent" {
                 o.fragData1 = float4(v.vertex.xy, v.uv3.xy);
                 o.fragData2 = float4(texFlag, gradientFlag, tintFlag, gradientTintFlag);
                 o.fragData3 = v.uv2;
-                
+                o.opacity = float4(v.uv3.x, 0, 0, 0);
                 return o;
            }
 
-           fixed4 FillFragment(v2f i, int strokeShape) {
+           fixed4 FillFragment(v2f i, int strokeShape, float opacity) {
 
                #define ShapeType i.flags.y
                #define GradientId i.flags.z
@@ -178,6 +179,7 @@ Shader "UIForia/BatchedTransparent" {
                float y = GetPixelInRowUV(GradientId, _globalGradientAtlasSize);
                
                fixed4 textureColor = tex2Dlod(_MainTex, float4(i.uv.xy, 0, 0));
+               textureColor.a *= opacity;
                fixed4 gradientColor = tex2Dlod(_globalGradientAtlas, float4(t, y, 0, 0));
                fixed4 tintColor = i.color;             
                
@@ -243,7 +245,7 @@ Shader "UIForia/BatchedTransparent" {
             fixed4 frag (v2f i) : SV_Target {
                 
                float2 p = i.fragData1.xy;
-               
+               float opacity = i.opacity;
                float2 bottomLeft = i.scissorRect.xw;
                float2 topRight = i.scissorRect.zy;
                
@@ -252,13 +254,13 @@ Shader "UIForia/BatchedTransparent" {
                }
    
                if(i.flags.x == RenderType_Fill) {
-                   return FillFragment(i, 0);
+                   return FillFragment(i, 0, opacity);
                }
                else if(i.flags.x == RenderType_Text) {
                    return TextFragment(i);
                }
                else if(i.flags.x == RenderType_StrokeShape) {
-                   return FillFragment(i, 1);
+                   return FillFragment(i, 1, opacity);
                }
                else if(i.flags.x == RenderType_Shadow) {
                    return ShadowFragment(i);

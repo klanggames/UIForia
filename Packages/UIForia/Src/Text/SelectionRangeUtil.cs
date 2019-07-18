@@ -21,7 +21,7 @@ namespace UIForia.Text {
                 source = DeleteTextForwards(source, ref selectionRange);
             }
 
-            int cursorIndex = selectionRange.cursorIndex;
+            int cursorIndex = Mathf.Clamp(selectionRange.cursorIndex, 0, source.Length - 1);
             TextEdge edge = selectionRange.cursorEdge;
             if (selectionRange.cursorIndex == source.Length - 1) {
                 if (selectionRange.cursorEdge == TextEdge.Left) {
@@ -73,7 +73,7 @@ namespace UIForia.Text {
             int cursorIndex = Mathf.Clamp(selectionRange.cursorIndex, 0, source.Length - 1);
 
             if (selectionRange.HasSelection) {
-                int min = (selectionRange.cursorIndex < selectionRange.selectIndex ? selectionRange.cursorIndex : selectionRange.selectIndex);
+                int min = Mathf.Clamp((selectionRange.cursorIndex < selectionRange.selectIndex ? selectionRange.cursorIndex : selectionRange.selectIndex), 0, source.Length - 1);
                 int max = (selectionRange.cursorIndex > selectionRange.selectIndex ? selectionRange.cursorIndex : selectionRange.selectIndex);
 
                 if (selectionRange.selectEdge == TextEdge.Right) {

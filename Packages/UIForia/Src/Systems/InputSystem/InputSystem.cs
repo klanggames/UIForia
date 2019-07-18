@@ -42,6 +42,9 @@ namespace UIForia.Systems {
         private List<UIElement> m_ElementsLastFrame;
         private List<UIElement> m_AllElementsLastFrame;
 
+        // temporary hack for the building system, this should be formalized and use ElementRef instead
+        public IReadOnlyList<UIElement> ElementsThisFrame => m_ElementsLastFrame;    
+
         private CursorStyle currentCursor;
 
         protected UIElement m_FocusedElement;

@@ -7,10 +7,10 @@ namespace UIForia.Rendering {
 
     public struct ResolvedBorderRadius {
 
-        public readonly float topLeft;
-        public readonly float topRight;
-        public readonly float bottomLeft;
-        public readonly float bottomRight;
+        public float topLeft;
+        public float topRight;
+        public float bottomLeft;
+        public float bottomRight;
 
         public ResolvedBorderRadius(float topLeft, float topRight, float bottomLeft, float bottomRight) {
             this.topLeft = topLeft;

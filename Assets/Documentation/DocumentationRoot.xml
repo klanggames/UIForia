@@ -29,7 +29,7 @@
 
             </Div>
 
-            <ScrollView style="demo-panel" x-router="demo" x-defaultRoute="/index">
+            <ScrollView style="demo-panel" x-router="demo" x-defaultRoute="/RepeatALot">
 
                 <Group x-route="/index">
                     <Heading1>UIForia Documentation</Heading1>

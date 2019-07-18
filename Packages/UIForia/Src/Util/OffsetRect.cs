@@ -4,10 +4,10 @@ namespace UIForia.Util {
 
     public struct OffsetRect {
 
-        public readonly float top;
-        public readonly float right;
-        public readonly float bottom;
-        public readonly float left;
+        public float top;
+        public float right;
+        public float bottom;
+        public float left;
         
         public OffsetRect(float top, float right, float bottom, float left) {
             this.top = top;

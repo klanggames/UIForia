@@ -9,6 +9,7 @@ using UIForia.Layout.LayoutTypes;
 using UIForia.Rendering;
 using UIForia.Util;
 using UnityEngine;
+using RectExtensions = Vertigo.RectExtensions;
 
 namespace UIForia.Systems {
 
@@ -140,6 +141,7 @@ namespace UIForia.Systems {
 
         }
 
+
         public void RunLayout(UIView view) {
             m_VisibleBoxList.QuickClear();
             view.visibleElements.QuickClear();
@@ -148,7 +150,7 @@ namespace UIForia.Systems {
 
             LayoutBox rootBox = m_LayoutBoxMap.GetOrDefault(rootElement.id);
             rootBox.element.layoutResult.matrix = new SVGXMatrix(1, 0, 0, 1, view.position.x, view.position.y);
-            
+
             rootBox.prefWidth = new UIMeasurement(1, UIMeasurementUnit.ViewportWidth);
             rootBox.prefHeight = new UIMeasurement(1, UIMeasurementUnit.ViewportHeight);
 
@@ -207,7 +209,7 @@ namespace UIForia.Systems {
                    box.markedForLayout = false;
                 }
 #endif
-                
+
                 if (box.children.Count == 0) {
                     leaves.Add(box);
                 }
@@ -216,6 +218,25 @@ namespace UIForia.Systems {
                 box.yMax = box.actualHeight;
             }
 
+            ProcessLeaves();
+
+            UpdateLayoutResults(toLayoutCount, toLayoutArray);
+
+            m_VisibleBoxList.EnsureAdditionalCapacity(toLayoutCount);
+
+            CullCheck(toLayoutArray, toLayoutCount);
+
+            m_VisibleBoxList.Sort(comparer);
+
+            LayoutBox[] boxes = m_VisibleBoxList.Array;
+            view.visibleElements.EnsureCapacity(m_VisibleBoxList.Count);
+            for (int i = 0; i < m_VisibleBoxList.Count; i++) {
+                boxes[i].element.layoutResult.zIndex = i + 1;
+                view.visibleElements.AddUnchecked(boxes[i].element);
+            }
+        }
+
+        private void ProcessLeaves() {
             int leafCount = leaves.Count;
             LayoutBox[] leafArray = leaves.Array;
 
@@ -255,11 +276,13 @@ namespace UIForia.Systems {
                     ptr = ptr.parent;
                 }
             }
+        }
 
+        private static void UpdateLayoutResults(int toLayoutCount, LayoutBox[] toLayoutArray) {
             for (int i = 0; i < toLayoutCount; i++) {
                 LayoutBox box = toLayoutArray[i];
 
-                Vector2 scrollOffset = new Vector2();
+                Vector2 scrollOffset = default;
 
                 LayoutBox parentBox = box.parent;
 
@@ -276,9 +299,11 @@ namespace UIForia.Systems {
                 layoutResult.clipRect = parentBox.clipRect;
 
                 Vector2 localPosition = ResolveLocalPosition(box) - scrollOffset;
-                Vector2 localScale = new Vector2(box.transformScaleX, box.transformScaleY);
+                Vector2 localScale = default;
+                localScale.x = box.transformScaleX;
+                localScale.y = box.transformScaleY;
 
-                Vector2 pivot = box.Pivot;
+                Vector2 pivot = box.pivot;
                 SVGXMatrix m;
 
                 if (box.transformRotation != 0) {
@@ -295,24 +320,28 @@ namespace UIForia.Systems {
                     m = pivotMat * m * pivotMat.Inverse();
                 }
 
-                float paddingLeft = box.resolvedPaddingLeft;
-                float paddingRight = box.resolvedPaddingRight;
-                float paddingBottom = box.resolvedPaddingBottom;
-                float paddingTop = box.resolvedPaddingTop;
-
-                float borderLeft = box.resolvedBorderLeft;
-                float borderRight = box.resolvedBorderRight;
-                float borderBottom = box.resolvedBorderBottom;
-                float borderTop = box.resolvedBorderTop;
-
-                m = parentMatrix * m;
+                // m = parentMatrix * m; might be backwards :/
+                m = new SVGXMatrix(
+                    m.m0 * parentMatrix.m0 + m.m2 * parentMatrix.m1,
+                    m.m1 * parentMatrix.m0 + m.m3 * parentMatrix.m1,
+                    m.m0 * parentMatrix.m2 + m.m2 * parentMatrix.m3,
+                    m.m1 * parentMatrix.m2 + m.m3 * parentMatrix.m3,
+                    m.m0 * parentMatrix.m4 + m.m2 * parentMatrix.m5 + m.m4,
+                    m.m1 * parentMatrix.m4 + m.m3 * parentMatrix.m5 + m.m5
+                );
+                
                 layoutResult.matrix = m;
 
-                layoutResult.overflowSize = new Size(box.xMax, box.yMax);
+                layoutResult.overflowSize.width = box.xMax;
+                layoutResult.overflowSize.height = box.yMax;
+
                 layoutResult.localPosition = localPosition;
 
-                layoutResult.actualSize = new Size(box.actualWidth, box.actualHeight);
-                layoutResult.allocatedSize = new Size(box.allocatedWidth, box.allocatedHeight);
+                layoutResult.actualSize.width = box.actualWidth;
+                layoutResult.actualSize.height = box.actualHeight;
+
+                layoutResult.allocatedSize.width = box.allocatedWidth;
+                layoutResult.allocatedSize.height = box.allocatedHeight;
 
                 layoutResult.screenPosition = m.position;
 
@@ -321,9 +350,20 @@ namespace UIForia.Systems {
                 layoutResult.rotation = box.transformRotation;
                 layoutResult.pivot = pivot;
 
-                layoutResult.borderRadius = new ResolvedBorderRadius(box.BorderRadiusTopLeft, box.BorderRadiusTopRight, box.BorderRadiusBottomRight, box.BorderRadiusBottomLeft);
-                layoutResult.border = new OffsetRect(borderTop, borderRight, borderBottom, borderLeft);
-                layoutResult.padding = new OffsetRect(paddingTop, paddingRight, paddingBottom, paddingLeft);
+                layoutResult.borderRadius.topLeft = box.resolvedBorderRadiusTopLeft; 
+                layoutResult.borderRadius.topRight = box.resolvedBorderRadiusTopRight; 
+                layoutResult.borderRadius.bottomRight = box.resolvedBorderRadiusBottomRight; 
+                layoutResult.borderRadius.bottomLeft = box.resolvedBorderRadiusBottomLeft;
+                
+                layoutResult.border.top = box.resolvedBorderTop;
+                layoutResult.border.right = box.resolvedBorderRight;
+                layoutResult.border.bottom = box.resolvedBorderBottom;
+                layoutResult.border.left =  box.resolvedBorderLeft;
+
+                layoutResult.padding.top = box.resolvedPaddingTop;
+                layoutResult.padding.right = box.resolvedPaddingRight;
+                layoutResult.padding.bottom = box.resolvedPaddingBottom;
+                layoutResult.padding.left = box.resolvedPaddingLeft;
 
                 if (box.overflowX != Overflow.Visible) {
                     // use own value for children
@@ -336,23 +376,37 @@ namespace UIForia.Systems {
                     box.clipRect.height = box.allocatedHeight;
                 }
             }
+        }
 
-            m_VisibleBoxList.EnsureAdditionalCapacity(toLayoutCount);
+        private void CullCheck(LayoutBox[] toLayoutArray, int toLayoutCount) {
+            float screenXMax = Screen.width;
+            float screenYMax = Screen.height;
+            LayoutBox[] output = m_VisibleBoxList.array;
+            int size = m_VisibleBoxList.size;
+
             for (int i = 0; i < toLayoutCount; i++) {
                 // if height or width is zero
                 // if parent overflow is hidden & parent clip bounds ! contains or intersects children
                 // if parent overflow is h
-                m_VisibleBoxList.AddUnchecked(toLayoutArray[i]);
+                UIElement element = toLayoutArray[i].element;
+
+                if (element.layoutResult.actualSize.width == 0 || element.layoutResult.actualSize.height == 0) {
+                    continue;
+                }
+
+                float xMin = element.layoutResult.screenPosition.x;
+                float xMax = xMin + element.layoutResult.actualSize.width;
+                float yMin = element.layoutResult.screenPosition.y;
+                float yMax = yMin + element.layoutResult.actualSize.height;
+
+                if (!(xMax > 0 && xMin < screenXMax && yMax > 0 && yMin < screenYMax)) {
+                    continue;
+                }
+
+                output[size++] = toLayoutArray[i];
             }
 
-            m_VisibleBoxList.Sort(comparer);
-
-            LayoutBox[] boxes = m_VisibleBoxList.Array;
-            view.visibleElements.EnsureCapacity(m_VisibleBoxList.Count);
-            for (int i = 0; i < m_VisibleBoxList.Count; i++) {
-                boxes[i].element.layoutResult.zIndex = i + 1;
-                view.visibleElements.AddUnchecked(boxes[i].element);
-            }
+            m_VisibleBoxList.size = size;
         }
 
         private static Vector2 ResolveLocalPosition(LayoutBox box) {
@@ -372,13 +426,14 @@ namespace UIForia.Systems {
 
                     switch (transformBehaviorX) {
                         case TransformBehavior.AnchorMinOffset:
-                            localPosition.x = box.AnchorLeft + box.TransformX;
+                            localPosition.x = box.ResolveAnchorLeft() + box.ResolveTransform(box.transformPositionX);
                             break;
                         case TransformBehavior.AnchorMaxOffset:
-                            localPosition.x = box.AnchorRight - box.TransformX - box.actualWidth;
+                            box.ResolveAnchorRight();
+                            localPosition.x = box.ResolveAnchorRight() - box.ResolveTransform(box.transformPositionX) - box.actualWidth;
                             break;
                         case TransformBehavior.LayoutOffset:
-                            localPosition.x = box.localX + box.TransformX;
+                            localPosition.x = box.localX + box.ResolveTransform(box.transformPositionX);
                             break;
                         default:
                             localPosition.x = box.localX;
@@ -387,13 +442,13 @@ namespace UIForia.Systems {
 
                     switch (transformBehaviorY) {
                         case TransformBehavior.AnchorMinOffset:
-                            localPosition.y = box.AnchorTop + box.TransformY;
+                            localPosition.y = box.ResolveAnchorTop() + box.ResolveTransform(box.transformPositionY);
                             break;
                         case TransformBehavior.AnchorMaxOffset:
-                            localPosition.y = box.AnchorBottom - box.TransformY - box.actualHeight;
+                            localPosition.y = box.ResolveAnchorBottom() - box.ResolveTransform(box.transformPositionY) - box.actualHeight;
                             break;
                         case TransformBehavior.LayoutOffset:
-                            localPosition.y = box.localY + box.TransformY;
+                            localPosition.y = box.localY + box.ResolveTransform(box.transformPositionY);
                             break;
                         default:
                             localPosition.y = box.localY;
@@ -414,6 +469,11 @@ namespace UIForia.Systems {
 
         public void OnViewRemoved(UIView view) {
             m_LayoutBoxMap.GetOrDefault(view.rootElement.id)?.Release();
+            for (int i = 0; i < m_TextLayoutBoxes.size; i++) {
+                if (m_TextLayoutBoxes[i].element.View == view) {
+                    m_TextLayoutBoxes.RemoveAt(i--);
+                }
+            }
         }
 
         private void HandleStylePropertyChanged(UIElement element, StructList<StyleProperty> properties) {
@@ -530,6 +590,10 @@ namespace UIForia.Systems {
                 UIElement current = stack.PopUnchecked();
 
                 if (m_LayoutBoxMap.Remove(current.id, out LayoutBox box)) {
+                    if (box is TextLayoutBox textLayoutBox) {
+                        m_TextLayoutBoxes.Remove(textLayoutBox);
+                    }
+
                     box.Release();
                 }
 

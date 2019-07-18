@@ -55,20 +55,6 @@ style grid-cell {
     Border = 20px;
 } 
 
-animation moveAnchor {
-    [options] {
-        duration = 3000;
-    }
-    [keyframes] {
-        0% {
-            AnchorLeft = 20px;
-        }
-        100% {
-            AnchorLeft = 1500px;
-        }
-    }
-}
-
 style anchor-left-top {
     AnchorTarget = Parent;
     AnchorLeft = 20px;
@@ -77,7 +63,6 @@ style anchor-left-top {
     TransformBehaviorY = AnchorMinOffset;
     TransformPositionY = 0;
     TransformBehaviorX = AnchorMinOffset;
-    run animation(moveAnchor);
 }
 
 style anchor-left-center {

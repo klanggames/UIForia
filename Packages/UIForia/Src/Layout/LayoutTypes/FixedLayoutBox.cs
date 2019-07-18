@@ -17,7 +17,8 @@ namespace UIForia.Layout.LayoutTypes {
             for (int i = 0; i < children.Count; i++) {
                 LayoutBox child = children[i];
 
-                float x = child.TransformX;
+                // todo - borked
+                float x = 0;
 
                 minX = Mathf.Min(minX, x);
                 maxX = Mathf.Max(maxX, x + child.GetWidths().clampedSize);
@@ -32,7 +33,7 @@ namespace UIForia.Layout.LayoutTypes {
             for (int i = 0; i < children.Count; i++) {
                 LayoutBox child = children[i];
 
-                float y = child.TransformY;
+                float y = 0; //child.TransformY;
 
                 minY = Mathf.Min(minY, y);
                 maxY = Mathf.Max(maxY, y + child.GetHeights(child.GetWidths().clampedSize).clampedSize);
@@ -52,8 +53,8 @@ namespace UIForia.Layout.LayoutTypes {
             for (int i = 0; i < children.Count; i++) {
                 LayoutBox child = children[i];
 
-                float x = child.TransformX;
-                float y = child.TransformY;
+                float x = 0;// child.TransformX;
+                float y = 0;// child.TransformY;
 
                 float width = child.GetWidths().clampedSize;
                 LayoutBoxSize heights = child.GetHeights(width);

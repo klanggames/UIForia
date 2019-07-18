@@ -5,8 +5,8 @@ namespace UIForia.Layout {
 
     public struct Size {
 
-        public readonly float width;
-        public readonly float height;
+        public float width;
+        public float height;
 
         public Size(float width, float height) {
             this.width = width;

@@ -97,6 +97,8 @@ namespace UIForia.Layout.LayoutTypes {
         internal int traversalIndex;
         internal int viewDepthIdx;
 
+        internal Vector2 pivot;
+        
         public bool markedForLayout;
         protected internal float cachedPreferredWidth;
 
@@ -106,26 +108,13 @@ namespace UIForia.Layout.LayoutTypes {
 
         public abstract void RunLayout();
 
-        public float TransformX => ResolveTransform(transformPositionX);
-        public float TransformY => ResolveTransform(transformPositionY);
-
         public float PaddingHorizontal => resolvedPaddingRight + resolvedPaddingLeft;
         public float BorderHorizontal => resolvedBorderLeft + resolvedBorderRight;
 
         public float PaddingVertical => resolvedPaddingTop + resolvedPaddingBottom;
         public float BorderVertical => resolvedBorderTop + resolvedBorderBottom;
 
-        public float BorderRadiusTopRight => ResolveFixedWidth(borderRadiusTopRight);
-        public float BorderRadiusTopLeft => ResolveFixedWidth(borderRadiusTopLeft);
-        public float BorderRadiusBottomRight => ResolveFixedWidth(borderRadiusBottomRight);
-        public float BorderRadiusBottomLeft => ResolveFixedWidth(borderRadiusBottomLeft);
-
         public bool IsIgnored => (layoutBehavior & LayoutBehavior.Ignored) != 0;
-
-        public float AnchorLeft => ResolveAnchorLeft();
-        public float AnchorRight => ResolveAnchorRight();
-        public float AnchorTop => ResolveAnchorTop();
-        public float AnchorBottom => ResolveAnchorBottom();
 
         public float PaddingBorderHorizontal =>
             resolvedPaddingLeft +
@@ -149,10 +138,10 @@ namespace UIForia.Layout.LayoutTypes {
             }
         }
 
-        public Vector2 Pivot => new Vector2(
-            ResolveFixedWidth(transformPivotX),
-            ResolveFixedHeight(transformPivotY)
-        );
+//        public Vector2 Pivot => new Vector2(
+//            ResolveFixedWidth(transformPivotX),
+//            ResolveFixedHeight(transformPivotY)
+//        );
 
         public float GetMarginTop(float width) {
             return ResolveMarginVertical(width, marginTop);
@@ -336,6 +325,7 @@ namespace UIForia.Layout.LayoutTypes {
                 resolvedBorderRadiusTopRight = ResolveFixedWidth(borderRadiusTopRight);
                 resolvedBorderRadiusBottomRight = ResolveFixedWidth(borderRadiusBottomRight);
                 resolvedBorderRadiusBottomLeft = ResolveFixedWidth(borderRadiusBottomLeft);
+                pivot.x = ResolveFixedWidth(transformPivotX);
             }
         }
 
@@ -350,6 +340,8 @@ namespace UIForia.Layout.LayoutTypes {
 
                 resolvedPaddingTop = ResolveFixedHeight(paddingTop);
                 resolvedPaddingBottom = ResolveFixedHeight(paddingBottom);
+                pivot.y = ResolveFixedWidth(transformPivotY);
+
             }
         }
 
@@ -674,7 +666,7 @@ namespace UIForia.Layout.LayoutTypes {
             }
         }
 
-        protected float ResolveAnchorRight() {
+        public float ResolveAnchorRight() {
             UIFixedLength anchor = style.AnchorRight;
             switch (style.AnchorTarget) {
                 case AnchorTarget.Unset:
@@ -708,7 +700,7 @@ namespace UIForia.Layout.LayoutTypes {
             }
         }
 
-        protected float ResolveAnchorLeft() {
+        public float ResolveAnchorLeft() {
             UIFixedLength anchor = style.AnchorLeft;
             switch (style.AnchorTarget) {
                 case AnchorTarget.Unset:
@@ -740,7 +732,7 @@ namespace UIForia.Layout.LayoutTypes {
             }
         }
 
-        protected float ResolveAnchorTop() {
+        public float ResolveAnchorTop() {
             UIFixedLength anchor = style.AnchorTop;
             switch (style.AnchorTarget) {
                 case AnchorTarget.Unset:
@@ -772,7 +764,7 @@ namespace UIForia.Layout.LayoutTypes {
             }
         }
 
-        protected float ResolveAnchorBottom() {
+        public float ResolveAnchorBottom() {
             UIFixedLength anchor = style.AnchorBottom;
             switch (style.AnchorTarget) {
                 case AnchorTarget.Unset:
@@ -1170,6 +1162,7 @@ namespace UIForia.Layout.LayoutTypes {
                 StyleProperty property = properties[i];
 
                 switch (property.propertyId) {
+
                     case StylePropertyId.PaddingLeft:
                         paddingLeft = property.AsUIFixedLength;
                         resolvedPaddingLeft = ResolveFixedWidth(property.AsUIFixedLength);

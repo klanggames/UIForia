@@ -96,7 +96,7 @@ namespace UIForia.Util {
 
         public void Add(T item) {
             if (size + 1 > array.Length) {
-                ArrayPool<T>.Resize(ref array, (size + 1) * 2);
+                System.Array.Resize(ref array, (size + 1) * 2);
             }
 
             array[size] = item;
@@ -214,7 +214,7 @@ namespace UIForia.Util {
 
         public void Insert(int index, T item) {
             if (size + 1 >= array.Length) {
-                ArrayPool<T>.Resize(ref array, (size + 1) * 2);
+                System.Array.Resize(ref array, (size + 1) * 2);
             }
 
             size++;
@@ -372,86 +372,16 @@ namespace UIForia.Util {
 
         public void EnsureCapacity(int capacity) {
             if (array.Length < capacity) {
-                ArrayPool<T>.Resize(ref array, capacity * 2);
+                System.Array.Resize(ref array, capacity);
             }
         }
 
         public void EnsureAdditionalCapacity(int capacity) {
             if (array.Length < size + capacity) {
-                ArrayPool<T>.Resize(ref array, (size + capacity) * 2);
+                System.Array.Resize(ref array, (size + capacity) * 2);
             }
         }
-
-        private void QuickSort(Comparison<T> comparison, int low, int high) {
-            while (true) {
-                if (low < high) {
-                    int partition = Partition(comparison, low, high);
-                    QuickSort(comparison, low, partition - 1);
-                    low = partition + 1;
-                    continue;
-                }
-
-                break;
-            }
-        }
-
-        private void QuickSort(IComparer<T> comparison, int low, int high) {
-            while (true) {
-                if (low < high) {
-                    int partition = Partition(comparison, low, high);
-                    QuickSort(comparison, low, partition - 1);
-                    low = partition + 1;
-                    continue;
-                }
-
-                break;
-            }
-        }
-
-        private int Partition(Comparison<T> comparison, int low, int high) {
-            T temp;
-            T pivot = array[high];
-
-            int i = (low - 1);
-            for (int j = low; j < high; j++) {
-                if (comparison(array[j], pivot) <= 0) {
-                    i++;
-
-                    temp = array[i];
-                    array[i] = array[j];
-                    array[j] = temp;
-                }
-            }
-
-            temp = array[i + 1];
-            array[i + 1] = array[high];
-            array[high] = temp;
-
-            return i + 1;
-        }
-
-        private int Partition(IComparer<T> comparison, int low, int high) {
-            T temp;
-            T pivot = array[high];
-
-            int i = (low - 1);
-            for (int j = low; j <= high - 1; j++) {
-                if (comparison.Compare(array[j], pivot) <= 0) {
-                    i++;
-
-                    temp = array[i];
-                    array[i] = array[j];
-                    array[j] = temp;
-                }
-            }
-
-            temp = array[i + 1];
-            array[i + 1] = array[high];
-            array[high] = temp;
-
-            return i + 1;
-        }
-
+        
         private class Cmp : IComparer<T> {
 
             public Comparison<T> cmp;

@@ -2,15 +2,13 @@
 <UITemplate>
 
     <Style>
-        "
         style friend-container {
             MarginLeft = 20px;
         }
-        "
     </Style>
     
     <Contents>
-        <Div>{player.id} -> {player.name}</Div>
+        <Div>{player.id}  {player.name}</Div>
         <Heading1>Friends:</Heading1>
         <Group style="friend-container">
             <Repeat list="player.friends">

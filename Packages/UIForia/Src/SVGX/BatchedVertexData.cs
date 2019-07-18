@@ -20,28 +20,28 @@ namespace SVGX {
 
         public int triangleIndex;
 
-        private readonly List<Vector3> positionList;
-        private readonly List<Vector4> uv0List;
-        private readonly List<Vector4> uv1List;
-        private readonly List<Vector4> uv2List;
-        private readonly List<Vector4> uv3List;
-        private readonly List<Vector4> uv4List;
-        private readonly List<Color> colorsList;
-        private readonly List<int> trianglesList;
+        private readonly StructList<Vector3> positionList;
+        private readonly StructList<Vector4> uv0List;
+        private readonly StructList<Vector4> uv1List;
+        private readonly StructList<Vector4> uv2List;
+        private readonly StructList<Vector4> uv3List;
+        private readonly StructList<Vector4> uv4List;
+        private readonly StructList<Color> colorList;
+        private readonly StructList<int> trianglesList;
 
         // todo -- figure out bit packing and remove uv3List and uv4List
         // todo -- when unity allows better mesh api, remove lists in favor of array
         // todo -- verify that mesh.Clear doesn't cause a re-allocation
 
         public BatchedVertexData() {
-            positionList = new List<Vector3>(128);
-            uv0List = new List<Vector4>(128);
-            uv1List = new List<Vector4>(128);
-            uv2List = new List<Vector4>(128);
-            uv3List = new List<Vector4>(128);
-            uv4List = new List<Vector4>(128);
-            colorsList = new List<Color>(128);
-            trianglesList = new List<int>(128 * 3);
+            positionList = new StructList<Vector3>(32);
+            uv0List = new StructList<Vector4>(32);
+            uv1List = new StructList<Vector4>(32);
+            uv2List = new StructList<Vector4>(32);
+            uv3List = new StructList<Vector4>(32);
+            uv4List = new StructList<Vector4>(32);
+            colorList = new StructList<Color>(32);
+            trianglesList = new StructList<int>(32 * 3);
             mesh = new Mesh();
             mesh.MarkDynamic();
         }
@@ -51,73 +51,50 @@ namespace SVGX {
         private const int VertexType_Near = 1;
         private const int VertexType_Far = 0;
 
-//        private static List<Vector3> s_Vector3List = new List<Vector3>(0);
-//        private static List<Vector3> s_PositionList = new List<Vector3>(0);
-        
+        private static readonly List<int> s_IntList = new List<int>(0);
+        private static readonly List<Vector3> s_Vector3List = new List<Vector3>(0);
+        private static readonly List<Vector4> s_Vector4List = new List<Vector4>(0);
+        private static readonly List<Color> s_ColorList = new List<Color>(0);
+
         public Mesh FillMesh() {
             mesh.Clear(true);
 
-            mesh.SetVertices(positionList);
-            mesh.SetColors(colorsList);
-            mesh.SetUVs(0, uv0List);
-            mesh.SetUVs(1, uv1List);
-            mesh.SetUVs(2, uv2List);
-            mesh.SetUVs(3, uv3List);
-            mesh.SetUVs(4, uv4List);
-            mesh.SetTriangles(trianglesList, 0);
+            UIForia.Extensions.ListAccessor<Vector3>.SetArray(s_Vector3List, positionList.array, positionList.size);
+            mesh.SetVertices(s_Vector3List);
 
-//            ListAccessor<Vector3>.Set(positionList, p);
-            positionList.Clear();
-            uv0List.Clear();
-            uv1List.Clear();
-            uv2List.Clear();
-            uv3List.Clear();
-            uv4List.Clear();
-            colorsList.Clear();
-            trianglesList.Clear();
+            UIForia.Extensions.ListAccessor<Color>.SetArray(s_ColorList, colorList.array, colorList.size);
+            mesh.SetColors(s_ColorList);
+
+            UIForia.Extensions.ListAccessor<Vector4>.SetArray(s_Vector4List, uv0List.array, uv0List.size);
+            mesh.SetUVs(0, s_Vector4List);
+
+            UIForia.Extensions.ListAccessor<Vector4>.SetArray(s_Vector4List, uv1List.array, uv1List.size);
+            mesh.SetUVs(1, s_Vector4List);
+
+            UIForia.Extensions.ListAccessor<Vector4>.SetArray(s_Vector4List, uv2List.array, uv2List.size);
+            mesh.SetUVs(2, s_Vector4List);
+
+            UIForia.Extensions.ListAccessor<Vector4>.SetArray(s_Vector4List, uv3List.array, uv3List.size);
+            mesh.SetUVs(3, s_Vector4List);
+
+            UIForia.Extensions.ListAccessor<Vector4>.SetArray(s_Vector4List, uv4List.array, uv4List.size);
+            mesh.SetUVs(4, s_Vector4List);
+
+            UIForia.Extensions.ListAccessor<int>.SetArray(s_IntList, trianglesList.array, trianglesList.size);
+            mesh.SetTriangles(s_IntList, 0);
+
             triangleIndex = 0;
 
+            positionList.size = 0;
+            colorList.size = 0;
+            uv0List.size = 0;
+            uv1List.size = 0;
+            uv2List.size = 0;
+            uv3List.size = 0;
+            uv4List.size = 0;
+            trianglesList.size = 0;
+
             return mesh;
-        }
-
-        public static float EncodeColor(Color color) {
-            return Vector4.Dot(color, new Vector4(1f, 1 / 255f, 1 / 65025.0f, 1 / 16581375.0f));
-        }
-
-        private void GenerateCapStart(Vector2[] points, int count, LineCap cap, float strokeWidth, float z) {
-            Vector2 p0 = points[0];
-            Vector2 p1 = points[1];
-
-            Vector3 v0 = new Vector3();
-            Vector3 v1 = new Vector3();
-            Vector3 v2 = new Vector3();
-            Vector3 v3 = new Vector3();
-
-            Vector2 toP1 = (p1 - p0).normalized;
-            Vector2 toP1Perp = new Vector2(-toP1.y, toP1.x);
-
-            switch (cap) {
-                case LineCap.Butt:
-                    v0 = toP1Perp * strokeWidth * 0.5f;
-                    v1 = -toP1Perp * strokeWidth * 0.5f;
-                    break;
-                case LineCap.Square:
-                    break;
-                case LineCap.Round:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(cap), cap, null);
-            }
-
-            positionList.Add(v0);
-            positionList.Add(v1);
-            positionList.Add(v2);
-            positionList.Add(v3);
-        }
-
-        private void GenerateJoinedPath(Vector2[] points, int count, Color color, float strokeWidth, float z) {
-            //  GenerateCapStart();
-            //  GenerateCapEnd();
         }
 
         private void GenerateSegmentBodies(Vector2[] points, Rect scissor, int count, Color color, float strokeWidth, float z) {
@@ -134,7 +111,7 @@ namespace SVGX {
             float maxX = float.MinValue;
             float minY = float.MaxValue;
             float maxY = float.MinValue;
-            
+
             for (int i = 1; i < count + 1; i++) {
                 if (points[i].x < minX) minX = points[i].x;
                 if (points[i].x > maxX) maxX = points[i].x;
@@ -144,9 +121,9 @@ namespace SVGX {
 
             float w = maxX - minX;
             float h = maxY - minY;
-            
+
             Vector4 scissorVector = new Vector4(scissor.x, -scissor.y, scissor.xMax, -scissor.yMax);
-            
+
             for (int i = 1; i < count; i++) {
                 Vector2 prev = points[i - 1];
                 Vector2 curr = points[i];
@@ -177,16 +154,16 @@ namespace SVGX {
                 uv3List.Add(new Vector4(1, 0, 0, 0));
                 uv3List.Add(new Vector4(-1, 1, 0, 0));
                 uv3List.Add(new Vector4(-1, 0, 0, 0));
-                
+
                 uv4List.Add(scissorVector);
                 uv4List.Add(scissorVector);
                 uv4List.Add(scissorVector);
                 uv4List.Add(scissorVector);
 
-                colorsList.Add(color);
-                colorsList.Add(color);
-                colorsList.Add(color);
-                colorsList.Add(color);
+                colorList.Add(color);
+                colorList.Add(color);
+                colorList.Add(color);
+                colorList.Add(color);
 
                 trianglesList.Add(triangleIndex + 0);
                 trianglesList.Add(triangleIndex + 1);
@@ -234,10 +211,11 @@ namespace SVGX {
                         AddVertex(new Vector2(center.x + x, center.y + y), Color.white, ++idx);
                         CompleteTriangle();
                     }
-                    
-                    
+
+
                     break;
                 }
+
                 case SVGXShapeType.RoundedRect: {
                     int renderData = BitUtil.SetHighLowBits((int) renderShape.shape.type, RenderTypeStrokeShape);
 
@@ -326,10 +304,10 @@ namespace SVGX {
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
 
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
 
                     triangleIndex = triIdx + 4;
                     return;
@@ -417,14 +395,15 @@ namespace SVGX {
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
 
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
 
                     triangleIndex = triIdx + 4;
                     return;
                 }
+
                 case SVGXShapeType.Text:
                     break;
                 default:
@@ -460,7 +439,153 @@ namespace SVGX {
             LightList<Vector2>.Release(ref pointCache);
         }
 
-        internal void CreateFillVertices(Vector2[] points, SVGXRenderShape renderShape, Rect scissorRect, GFX.GradientData gradientData, SVGXStyle style, SVGXMatrix matrix) {
+        internal void CreateTextFillVertices(Vector2[] points, int start, in SVGXRenderShape renderShape, in SVGXStyle style, in Vector4 scissorVector, in SVGXMatrix matrix) {
+            Vector2 p0 = matrix.Transform(points[start]);
+            int renderData = BitUtil.SetHighLowBits((int) renderShape.shape.type, RenderTypeText);
+
+            TextInfo textInfo = renderShape.textInfo;
+
+            CharInfo[] charInfos = textInfo.charInfoList.Array;
+            int charCount = textInfo.CharCount;
+
+            SVGXTextStyle textStyle = textInfo.spanList[0].textStyle;
+
+            float outlineWidth = Mathf.Clamp01(textStyle.outlineWidth);
+            float outlineSoftness = textStyle.outlineSoftness;
+
+            Color32 glowColor = Color.green;
+            float glowOuter = textStyle.glowOuter;
+            float glowOffset = textStyle.glowOffset;
+            float z = renderShape.zIndex;
+            
+            Vector4 glowAndRenderData = new Vector4(renderData, new StyleColor(glowColor).rgba, glowOuter, glowOffset);
+
+            int isStroke = 0;
+
+            Vector4 outline = new Vector4(outlineWidth, outlineSoftness, VertigoUtil.ColorToFloat(textStyle.outlineColor), 0);
+
+            Color textColor = style.fillColor;
+
+            positionList.EnsureAdditionalCapacity(charCount * 4);
+            uv0List.EnsureAdditionalCapacity(charCount * 4);
+            uv1List.EnsureAdditionalCapacity(charCount * 4);
+            uv2List.EnsureAdditionalCapacity(charCount * 4);
+            uv3List.EnsureAdditionalCapacity(charCount * 4);
+            uv4List.EnsureAdditionalCapacity(charCount * 4);
+            colorList.EnsureAdditionalCapacity(charCount * 4);
+            trianglesList.EnsureAdditionalCapacity(charCount * 6);
+
+            Vector3[] positions = positionList.array;
+            Vector4[] uv0 = uv0List.array;
+            Vector4[] uv1 = uv1List.array;
+            Vector4[] uv2 = uv2List.array;
+            Vector4[] uv4 = uv4List.array;
+            Color[] colors = colorList.array;
+            int[] triangles = trianglesList.array;
+
+            int vertIdx = positionList.size;
+            int tidx = trianglesList.size;
+
+            // todo -- clip smarter using layout lines
+            for (int i = 0; i < charCount; i++) {
+                ref CharInfo charInfo = ref charInfos[i];
+                if (charInfo.character == ' ') continue;
+
+                Vector2 topLeft = charInfo.layoutTopLeft;
+                Vector2 bottomRight = charInfo.layoutBottomRight;
+
+                ref Vector3 position = ref positions[vertIdx + 0];
+                position.x = p0.x + topLeft.x;
+                position.y = -p0.y + -bottomRight.y;
+                position.z = z;
+
+                position = ref positions[vertIdx + 1];
+                position.x = p0.x + topLeft.x;
+                position.y = -p0.y + -topLeft.y;
+                position.z = z;
+
+                position = ref positions[vertIdx + 2];
+                position.x = p0.x + bottomRight.x;
+                position.y = -p0.y + -topLeft.y;
+                position.z = z;
+
+                position = ref positions[vertIdx + 3];
+                position.x = p0.x + bottomRight.x;
+                position.y = -p0.y + -bottomRight.y;
+                position.z = z;
+
+                float x = charInfo.uv0.x; 
+                float y = charInfo.uv0.y;
+                float x1 = charInfo.uv1.x;
+                float y1 = charInfo.uv1.y;
+
+                ref Vector4 uvVec = ref uv0[vertIdx + 0];
+                uvVec.x = x;
+                uvVec.y = y;
+                uvVec.z = charInfo.uv2.x;
+                uvVec.w = isStroke;
+
+                uvVec = ref uv0[vertIdx + 1];
+                uvVec.x = x;
+                uvVec.y = y1;
+                uvVec.z = charInfo.uv2.x;
+                uvVec.w = isStroke;
+
+                uvVec = ref uv0[vertIdx + 2];
+                uvVec.x = x1;
+                uvVec.y = y1;
+                uvVec.z = charInfo.uv2.x;
+                uvVec.w = isStroke;
+
+                uvVec = ref uv0[vertIdx + 3];
+                uvVec.x = x1;
+                uvVec.y = y;
+                uvVec.z = charInfo.uv2.x;
+                uvVec.w = isStroke;
+
+                uv1[vertIdx + 0] = glowAndRenderData;
+                uv1[vertIdx + 1] = glowAndRenderData;
+                uv1[vertIdx + 2] = glowAndRenderData;
+                uv1[vertIdx + 3] = glowAndRenderData;
+
+                uv2[vertIdx + 0] = outline;
+                uv2[vertIdx + 1] = outline;
+                uv2[vertIdx + 2] = outline;
+                uv2[vertIdx + 3] = outline;
+
+                uv4[vertIdx + 0] = scissorVector;
+                uv4[vertIdx + 1] = scissorVector;
+                uv4[vertIdx + 2] = scissorVector;
+                uv4[vertIdx + 3] = scissorVector;
+
+                colors[vertIdx + 0] = textColor;
+                colors[vertIdx + 1] = textColor;
+                colors[vertIdx + 2] = textColor;
+                colors[vertIdx + 3] = textColor;
+
+                triangles[tidx + 0] = vertIdx + 0;
+                triangles[tidx + 1] = vertIdx + 1;
+                triangles[tidx + 2] = vertIdx + 2;
+                triangles[tidx + 3] = vertIdx + 2;
+                triangles[tidx + 4] = vertIdx + 3;
+                triangles[tidx + 5] = vertIdx + 0;
+
+                vertIdx += 4;
+                tidx += 6;
+                triangleIndex += 4;
+            }
+
+            positionList.size = vertIdx;
+            colorList.size = vertIdx;
+            uv0List.size = vertIdx;
+            uv1List.size = vertIdx;
+            uv2List.size = vertIdx;
+            uv3List.size = vertIdx;
+            uv4List.size = vertIdx;
+            trianglesList.size = tidx;
+        }
+
+        internal void CreateFillVertices(Vector2[] points, SVGXRenderShape renderShape, Rect scissorRect, GFX.GradientData gradientData, in SVGXStyle style, in SVGXMatrix matrix) {
             int start = renderShape.shape.pointRange.start;
             int end = renderShape.shape.pointRange.end;
 
@@ -495,109 +620,17 @@ namespace SVGX {
                 case SVGXShapeType.Unset:
                     break;
                 case SVGXShapeType.Text: {
-                    Vector2 p0 = matrix.Transform(points[start]);
-                    renderData = BitUtil.SetHighLowBits((int) renderShape.shape.type, RenderTypeText);
-
-                    TextInfo textInfo = renderShape.textInfo;
-//   UIForia doesn't want this to do layout but raw system probably does
-//                    if (textInfo.layoutBeforeRender && textInfo.LayoutDirty) {
-//                        textInfo.Layout(Vector2.zero);
-//                    }
-                    
-                    CharInfo[] charInfos = textInfo.charInfoList.Array;
-                    int charCount = textInfo.CharCount;
-
-                    SVGXTextStyle textStyle = textInfo.spanList[0].textStyle;
-
-                    float outlineWidth = Mathf.Clamp01(textStyle.outlineWidth);
-                    float outlineSoftness = textStyle.outlineSoftness;
-
-                    Color32 glowColor = Color.green;
-                    float glowOuter = textStyle.glowOuter;
-                    float glowOffset = textStyle.glowOffset;
-
-                    Vector4 glowAndRenderData = new Vector4(renderData, new StyleColor(glowColor).rgba, glowOuter, glowOffset);
-
-                    int isStroke = 0;
-
-                    Vector4 outline = new Vector4(outlineWidth, outlineSoftness, VertigoUtil.ColorToFloat(textStyle.outlineColor), 0);
-
-                    Color textColor = style.fillColor;
-
-                    // todo -- clip smarter using layout lines
-                    for (int i = 0; i < charCount; i++) {
-                        
-                        if (charInfos[i].character == ' ') continue;
-                        
-                        Vector2 topLeft = charInfos[i].layoutTopLeft;
-                        Vector2 bottomRight = charInfos[i].layoutBottomRight;
-//                        topLeft.x = topLeft.x - 2.5f;
-//                        bottomRight.x = bottomRight.x + 2.5f;
-//                        topLeft.y = topLeft.y - 2.5f;
-//                        bottomRight.y = bottomRight.y + 2.5f;
-
-                        positionList.Add(new Vector3(p0.x + topLeft.x, -p0.y + -bottomRight.y, z)); // Bottom Left
-                        positionList.Add(new Vector3(p0.x + topLeft.x, -p0.y + -topLeft.y, z)); // Top Left
-                        positionList.Add(new Vector3(p0.x + bottomRight.x, -p0.y + -topLeft.y, z)); // Top Right
-                        positionList.Add(new Vector3(p0.x + bottomRight.x, -p0.y + -bottomRight.y, z)); // Bottom Right
-
-                        float x = charInfos[i].uv0.x; // - (5 / 1024f);
-                        float y = charInfos[i].uv0.y; // - (5 / 1024f);
-                        float x1 = charInfos[i].uv1.x; // + (5 / 1024f);
-                        float y1 = charInfos[i].uv1.y; // + (5 / 1024f);
-
-                        uv0List.Add(new Vector4(x, y, charInfos[i].uv2.x, isStroke));
-                        uv0List.Add(new Vector4(x, y1, charInfos[i].uv2.x, isStroke));
-                        uv0List.Add(new Vector4(x1, y1, charInfos[i].uv2.x, isStroke));
-                        uv0List.Add(new Vector4(x1, y, charInfos[i].uv2.x, isStroke));
-
-                        uv1List.Add(glowAndRenderData);
-                        uv1List.Add(glowAndRenderData);
-                        uv1List.Add(glowAndRenderData);
-                        uv1List.Add(glowAndRenderData);
-
-                        uv2List.Add(outline);
-                        uv2List.Add(outline);
-                        uv2List.Add(outline);
-                        uv2List.Add(outline);
-
-                        uv3List.Add(default);
-                        uv3List.Add(default);
-                        uv3List.Add(default);
-                        uv3List.Add(default);
-                        
-                        uv4List.Add(scissorVector);
-                        uv4List.Add(scissorVector);
-                        uv4List.Add(scissorVector);
-                        uv4List.Add(scissorVector);
-
-                        colorsList.Add(textColor);
-                        colorsList.Add(textColor);
-                        colorsList.Add(textColor);
-                        colorsList.Add(textColor);
-
-                        trianglesList.Add(triangleIndex + 0);
-                        trianglesList.Add(triangleIndex + 1);
-                        trianglesList.Add(triangleIndex + 2);
-                        trianglesList.Add(triangleIndex + 2);
-                        trianglesList.Add(triangleIndex + 3);
-                        trianglesList.Add(triangleIndex + 0);
-
-                        triangleIndex += 4;
-                    }
-
+                    CreateTextFillVertices(points, start, renderShape, style, scissorVector, matrix);
                     break;
                 }
+
                 case SVGXShapeType.Ellipse:
                 case SVGXShapeType.Circle:
                 case SVGXShapeType.Rect: {
                     Vector2 pos = points[start + 0];
                     Vector2 wh = points[start + 1];
 
-//                    pos.x -= 1f;
-//                    pos.y -= 1f;
-//                    wh.x += 2f;
-//                    wh.y += 2f;
+                    // todo -- in + matrix == bad
                     Vector2 p0 = matrix.Transform(new Vector2(pos.x, pos.y));
                     Vector2 p1 = matrix.Transform(new Vector2(pos.x + wh.x, pos.y));
                     Vector2 p2 = matrix.Transform(new Vector2(pos.x + wh.x, pos.y + wh.y));
@@ -676,31 +709,33 @@ namespace SVGX {
                     uv2List.Add(new Vector4(0, 0, 0, 0));
                     uv2List.Add(new Vector4(0, 0, 0, 0));
 
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
 
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
 
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
 
                     triangleIndex = triIdx + 4;
 
                     break;
                 }
+
                 case SVGXShapeType.Path: {
                     // assume closed for now
                     // assume convex for now
 
                     throw new NotImplementedException();
                 }
+
                 case SVGXShapeType.RoundedRect: { // or other convex shape without holes
 
                     Vector2 pos = points[start + 0];
@@ -741,25 +776,26 @@ namespace SVGX {
                     uv2List.Add(new Vector4(borderRadiusXY.x, borderRadiusXY.y, borderRadiusZW.x, borderRadiusZW.y));
                     uv2List.Add(new Vector4(borderRadiusXY.x, borderRadiusXY.y, borderRadiusZW.x, borderRadiusZW.y));
 
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
-                    uv3List.Add(new Vector4());
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
+                    uv3List.Add(new Vector4(opacity, 0, 0, 0));
 
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
                     uv4List.Add(scissorVector);
 
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
 
                     triangleIndex = triIdx + 4;
 
                     break;
                 }
+
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -838,10 +874,10 @@ namespace SVGX {
                     uv4List.Add(new Vector4());
                     uv4List.Add(new Vector4());
 
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
-                    colorsList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
+                    colorList.Add(color);
 
                     triangleIndex = triIdx + 4;
                     break;
@@ -1096,7 +1132,6 @@ namespace SVGX {
             }
         }
 
-        
 
         private static bool IsLeft(Vector2 a, Vector2 b, Vector2 c) {
             return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0;
@@ -1242,7 +1277,6 @@ namespace SVGX {
 
         }
 
-       
 
         private void AddVertex(Vector2 position, Color color, int idx) {
             switch (idx) {
@@ -1264,7 +1298,7 @@ namespace SVGX {
             }
 
             positionList.Add(new Vector3(position.x, -position.y, 500)); // todo -- set z
-            colorsList.Add(color);
+            colorList.Add(color);
             uv1List.Add(new Vector4());
             uv2List.Add(new Vector4());
             uv3List.Add(new Vector4());
@@ -1296,8 +1330,6 @@ namespace SVGX {
 
             triangleIndex = triIdx + 3;
         }
-
-       
 
     }
 

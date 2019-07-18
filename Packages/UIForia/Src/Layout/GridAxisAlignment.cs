@@ -9,4 +9,5 @@ namespace UIForia.Layout {
         Fit = 5,
         Shrink = 6
     }
+    
 }

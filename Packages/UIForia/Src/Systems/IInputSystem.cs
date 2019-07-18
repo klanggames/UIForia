@@ -11,6 +11,7 @@ namespace UIForia.Systems {
         MouseInputEvent CurrentMouseEvent { get; }
         DragEvent CurrentDragEvent { get; }
         KeyboardInputEvent CurrentKeyboardEvent { get; }
+        IReadOnlyList<UIElement> ElementsThisFrame { get; }
         void OnLateUpdate();
         
 #if UNITY_EDITOR

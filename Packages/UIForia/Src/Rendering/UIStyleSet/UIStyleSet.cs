@@ -733,6 +733,7 @@ namespace UIForia.Rendering {
                 }
                 else {
                     propertyMap.Remove((int) propertyId);
+                    styleSystem?.SetStyleProperty(element, GetPropertyValue(propertyId));
                 }
             }
 
